@@ -222,6 +222,14 @@ export class Vehicle {
     this.suspension = [0, 0, 0, 0];
     this.impact = 0;
 
+    // ---- state untuk audio & guncangan ----
+    this.rpm = 820;          // putaran mesin (RPM) — dipakai sintesis suara
+    this.throttle = 0;       // 0..1 bukaan gas terhalus
+    this.roughness = 0;      // 0..1 kekasaran medan di bawah roda
+    this.vibration = 0;      // 0..1 getaran bodi total (kamera + audio)
+    this.wheelBump = [0, 0, 0, 0];   // guncangan vertikal per roda
+    this.wheelWobble = [0, 0, 0, 0]; // goyangan samping per roda
+
     this.quat = new THREE.Quaternion();
     this.targetQuat = new THREE.Quaternion();
 
@@ -393,6 +401,15 @@ export class Vehicle {
     this.bodyPitch = 0;
     this.steerWheelAngle = 0;
     if (this.steerWheel) this.steerWheel.quaternion.copy(this.steerWheelBase);
+
+    this.rpm = 820;
+    this.throttle = 0;
+    this.roughness = 0;
+    this.vibration = 0;
+    for (let k = 0; k < 4; k++) {
+      this.wheelBump[k] = 0;
+      this.wheelWobble[k] = 0;
+    }
 
     const n = terrainNormal(this.pos.x, this.pos.z, this._n);
     this.quat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
@@ -599,6 +616,22 @@ export class Vehicle {
     // ---------- roda ----------
     this.wheelSpin -= (this.speed * dt) / WHEEL_RADIUS;
 
+    // Kekasaran medan: selisih tinggi antar roda + variasi lokal. Dipakai untuk
+    // guncangan bodi, getaran kamera, dan intensitas suara kerikil.
+    const spread = Math.max(hFL, hFR, hRL, hRR) - Math.min(hFL, hFR, hRL, hRR);
+    const localVar = Math.abs(terrainHeight(this.pos.x + 1.2, this.pos.z) - heights[0]) +
+      Math.abs(terrainHeight(this.pos.x, this.pos.z + 1.2) - heights[0]);
+    const roughTarget = THREE.MathUtils.clamp(spread * 0.55 + localVar * 0.30, 0, 1);
+    this.roughness += (roughTarget - this.roughness) * (1 - Math.exp(-6 * dt));
+
+    const spdNorm = Math.min(1, Math.abs(this.speed) / 26);
+    const vibTarget = this.grounded
+      ? Math.min(1, this.roughness * (0.35 + spdNorm * 1.25) + spdNorm * 0.06)
+      : 0.05;
+    this.vibration += (vibTarget - this.vibration) * (1 - Math.exp(-9 * dt));
+
+    const vibTime = performance.now() * 0.001;
+
     for (let k = 0; k < 4; k++) {
       const w = this.wheels[k];
       const spin = this.grounded ? this.wheelSpin : this.wheelSpin * 0.98;
@@ -613,7 +646,30 @@ export class Vehicle {
         off = THREE.MathUtils.clamp((heights[k] - wWorldY) * 0.75, -0.16, 0.16);
       }
       this.suspension[k] += (off - this.suspension[k]) * (1 - Math.exp(-16 * dt));
-      w.pivot.position.y = w.baseY + this.suspension[k];
+
+      // ---- guncangan ban: tiap roda punya fase sendiri ----
+      // Getaran halus dari permukaan (selalu ada saat bergerak) ditambah
+      // hentakan keras saat roda menabrak gundukan (suspensi memanjang).
+      let bump = 0;
+      let wobble = 0;
+      if (this.grounded && Math.abs(this.speed) > 0.4) {
+        const phase = k * 1.9;
+        const f1 = 13.0 + k * 1.7;
+        const f2 = 27.0 + k * 2.3;
+        const amp = this.roughness * (0.030 + spdNorm * 0.055) + spdNorm * 0.004;
+        bump = (Math.sin(vibTime * f1 + phase) * 0.65 +
+          Math.sin(vibTime * f2 + phase * 1.7) * 0.35) * amp;
+        wobble = Math.sin(vibTime * (9.0 + k * 0.8) + phase * 2.3) * amp * 0.7;
+      }
+      // hentakan dari suspensi yang sedang bekerja keras
+      bump += this.suspension[k] * 0.35;
+
+      this.wheelBump[k] += (bump - this.wheelBump[k]) * (1 - Math.exp(-22 * dt));
+      this.wheelWobble[k] += (wobble - this.wheelWobble[k]) * (1 - Math.exp(-18 * dt));
+
+      w.pivot.position.y = w.baseY + this.suspension[k] + this.wheelBump[k];
+      w.pivot.rotation.z = this.wheelWobble[k] * 0.35;
+      w.pivot.rotation.x = this.wheelBump[k] * 0.55;
     }
 
     // ---------- setir di dalam kabin ----------
@@ -626,10 +682,35 @@ export class Vehicle {
       this.steerWheel.quaternion.copy(this.steerWheelBase).multiply(_qSteer);
     }
 
+    // ---------- state mesin (dipakai sintesis suara) ----------
+    this.throttle += ((throttle ? 1 : 0) - this.throttle) * (1 - Math.exp(-11 * dt));
+
+    // Simulasi 5 gigi: RPM naik dari 800 (idle) ke ~4600 lalu turun saat
+    // gigi berikutnya masuk. Membuat suara mesin punya "tangga" yang wajar,
+    // bukan cuma mengikuti kecepatan linear.
+    const kmhAbs = Math.abs(this.speed) * 3.6;
+    const GEARS = [0, 26, 52, 84, 120, 170];
+    const IDLE = 800;
+    const REDLINE = 4650;
+    let gearIdx = 1;
+    while (gearIdx < GEARS.length - 1 && kmhAbs > GEARS[gearIdx]) gearIdx++;
+    const lo = GEARS[gearIdx - 1];
+    const hi = GEARS[gearIdx];
+    const inGear = THREE.MathUtils.clamp((kmhAbs - lo) / Math.max(1, hi - lo), 0, 1);
+    let targetRpm = IDLE + inGear * (REDLINE - IDLE);
+
+    // kopling / netral: menahan gas di tempat membuat RPM naik sedikit
+    if (kmhAbs < 1.5) targetRpm = IDLE + this.throttle * 1250;
+    if (!this.grounded) targetRpm += this.throttle * 700;
+
+    this.rpm += (targetRpm - this.rpm) * (1 - Math.exp(-9 * dt));
+
     // ---------- telemetri ----------
     this.telemetry.kmh = Math.abs(this.speed) * 3.6;
     this.telemetry.gear = this.speed > 0.6 ? 'D' : (this.speed < -0.6 ? 'R' : 'N');
     this.telemetry.slip = Math.abs(this.steer) * Math.min(1, Math.abs(this.speed) / 22);
+    this.telemetry.rpm = this.rpm;
+    this.telemetry.rough = this.roughness;
 
     this.impact *= Math.exp(-3.5 * dt);
     this.syncTransform();

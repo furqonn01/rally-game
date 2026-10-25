@@ -6,6 +6,7 @@ import { Vehicle } from './vehicle.js';
 import { CameraRig } from './cameras.js';
 import { Track, CHECKPOINT_COUNT } from './track.js';
 import { Scenery, Dust } from './scenery.js';
+import { VehicleAudio } from './audio.js';
 
 // ---------------------------------------------------------------------------
 // Renderer
@@ -100,6 +101,11 @@ const vehicle = new Vehicle();
 scene.add(vehicle.root);
 
 const camRig = new CameraRig(camera, vehicle);
+
+// ---------------------------------------------------------------------------
+// Audio kendaraan (prosedural)
+// ---------------------------------------------------------------------------
+const audio = new VehicleAudio();
 
 // ---------------------------------------------------------------------------
 // HUD
@@ -283,7 +289,11 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyC') {
       const label = camRig.cycle();
       el.camModeText.textContent = label;
+      audio.setMode(camRig.mode);
       toast(label, true);
+    } else if (e.code === 'KeyM') {
+      const muted = audio.toggleMute();
+      toast(muted ? 'SUARA: MATI' : 'SUARA: HIDUP', !muted);
     } else if (e.code === 'KeyR') {
       if (state.mode === 'playing' || state.mode === 'paused') respawnAtCheckpoint();
     } else if (e.code === 'KeyP') {
@@ -350,18 +360,23 @@ function startGame() {
   el.hud.classList.add('visible');
   state.mode = 'playing';
   state.elapsed = 0;
+  audio.setMode(camRig.mode);
+  audio.setPaused(false);
+  audio.init();
   toast('GO! LEWATI SEMUA CHECKPOINT', true);
 }
 
 function pauseGame() {
   if (state.mode !== 'playing') return;
   state.mode = 'paused';
+  audio.setPaused(true);
   el.pause.classList.remove('hidden');
 }
 
 function resumeGame() {
   if (state.mode !== 'paused') return;
   state.mode = 'playing';
+  audio.setPaused(false);
   el.pause.classList.add('hidden');
   clock.getDelta();
 }
@@ -379,6 +394,8 @@ function restartGame() {
   state.elapsed = 0;
   state.mode = 'playing';
   el.cpVal.textContent = '0 / ' + CHECKPOINT_COUNT;
+  audio.setMode(camRig.mode);
+  audio.setPaused(false);
   toast('PETUALANGAN DIMULAI ULANG', true);
 }
 
@@ -392,6 +409,7 @@ function respawnAtCheckpoint() {
 
 function finishRun() {
   state.mode = 'finished';
+  audio.setPaused(true);
   const t = state.elapsed;
 
   let extra = '';
@@ -530,6 +548,12 @@ function animate() {
   vehicle.root.updateMatrixWorld(true);
   camRig.update(dt, vehicle.telemetry.kmh);
 
+  // ---- audio kendaraan ----
+  // Profil akustik selalu mengikuti mode kamera aktif (kabin vs luar kabin),
+  // termasuk bila mode diubah lewat kode/UI, bukan hanya tombol C.
+  audio.setMode(camRig.mode);
+  audio.update(dt, vehicle);
+
   // ---- matahari mengikuti mobil ----
   sun.position.copy(vehicle.pos).addScaledVector(sunDir, 170);
   sun.target.position.copy(vehicle.pos);
@@ -569,7 +593,7 @@ function pos3(v) {
 // Debug hook (dipakai untuk pengujian otomatis)
 // ---------------------------------------------------------------------------
 window.__game = {
-  THREE, renderer, scene, camera, terrain, track, scenery, dust, vehicle, camRig,
+  THREE, renderer, scene, camera, terrain, track, scenery, dust, vehicle, camRig, audio,
   state, input, keys,
   start: startGame, pause: pauseGame, resume: resumeGame, restart: restartGame,
   respawn: respawnAtCheckpoint,

@@ -12,6 +12,8 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _q1 = new THREE.Quaternion();
 const _e1 = new THREE.Euler(0, 0, 0, 'YXZ');
+const _eVib = new THREE.Euler(0, 0, 0, 'YXZ');
+const _qVib = new THREE.Quaternion();
 
 // Sudut pandang POV pengemudi dimiringkan sedikit ke bawah (radian, negatif =
 // lihat ke bawah) supaya cincin setir masuk ke bagian bawah frame. Tanpa ini
@@ -37,6 +39,7 @@ export class CameraRig {
     this.orbitDist = 9;
 
     this.shake = 0;
+    this.vibShake = 0;
     this.fovBase = 62;
     this.initialized = false;
   }
@@ -95,6 +98,11 @@ export class CameraRig {
     this.shake *= Math.exp(-5 * dt);
     const shakeAmt = this.shake * 0.06 + (v.grounded ? 0 : 0.012);
 
+    // Getaran medan: di dalam kabin seluruh bodi bergetar bersama pengemudi,
+    // jadi efeknya jauh lebih terasa. Di kamera luar, kamera "mengambang" dan
+    // hanya ikut sebagian — guncangan dari ban hampir hilang.
+    this.vibShake = (v.vibration || 0) * (this.mode === 'pengemudi' ? 1 : 0.32);
+
     if (this.mode === 'pengemudi') {
       this.updateDriver(dt, shakeAmt);
     } else if (this.mode === 'orbit') {
@@ -128,9 +136,33 @@ export class CameraRig {
     _e1.set(this.lookPitch, this.lookYaw, 0);
     const lookQuat = new THREE.Quaternion().setFromEuler(_e1);
 
+    // ---- getaran kabin: badan & kepala ikut bergetar bersama bodi ----
+    // Karena kamera menempel ke bodi, getaran ban harus terasa sebagai
+    // guncangan nyata: posisi naik-turun/tenggelam, plus rotasi kecil
+    // (roll & pitch) yang membuat dunia terlihat bergetar.
+    const vib = this.vibShake || 0;
+    let vibRoll = 0;
+    let vibPitch = 0;
+
+    if (vib > 0.0008) {
+      const t = performance.now() * 0.001;
+      const amp = vib * 0.045;
+
+      worldPos.y += Math.sin(t * 23.7) * amp * 1.5 + Math.sin(t * 41.1) * amp * 0.55;
+      worldPos.x += Math.sin(t * 19.3) * amp * 0.75;
+      worldPos.z += Math.cos(t * 21.9) * amp * 0.6;
+
+      // roll/pitch kecil — inilah yang paling terasa "guncangan ban"
+      vibRoll = (Math.sin(t * 17.3) * 0.010 + Math.sin(t * 33.9) * 0.005) * vib;
+      vibPitch = (Math.sin(t * 21.1) * 0.007 + Math.sin(t * 39.7) * 0.004) * vib;
+
+      _eVib.set(vibPitch, 0, vibRoll);
+      lookQuat.multiply(_qVib.setFromEuler(_eVib));
+    }
+
     const finalQuat = bodyQuat.clone().multiply(lookQuat);
 
-    // guncangan halus
+    // guncangan benturan
     if (shakeAmt > 0.0005) {
       const t = performance.now() * 0.001;
       worldPos.x += Math.sin(t * 41.3) * shakeAmt;
@@ -181,6 +213,18 @@ export class CameraRig {
 
     cam.position.copy(this.chasePos);
 
+    // getaran dari luar: hanya frekuensi rendah & amplitudo kecil, karena
+    // kamera tidak menempel pada bodi. Guncangan ban halus nyaris tak terasa.
+    const vib = this.vibShake || 0;
+    if (vib > 0.0008) {
+      const t = performance.now() * 0.001;
+      const amp = vib * 0.022;
+      cam.position.y += Math.sin(t * 11.3) * amp;
+      cam.position.x += Math.sin(t * 8.7) * amp * 0.5;
+      // look target ikut bergoyang sedikit -> frame terasa "hidup"
+      this.chaseLook.y += Math.sin(t * 9.1) * amp * 0.9;
+    }
+
     if (shakeAmt > 0.0005) {
       const t = performance.now() * 0.001;
       cam.position.x += Math.sin(t * 38.1) * shakeAmt;
@@ -216,6 +260,15 @@ export class CameraRig {
 
     const rate = 1 - Math.exp(-8 * dt);
     cam.position.lerp(desired, rate);
+
+    // getaran dari kamera bebas: paling halus (kamera jauh dari mobil)
+    const vib = this.vibShake || 0;
+    if (vib > 0.0008) {
+      const t = performance.now() * 0.001;
+      const amp = vib * 0.014;
+      cam.position.y += Math.sin(t * 7.3) * amp;
+      cam.position.x += Math.sin(t * 6.1) * amp * 0.6;
+    }
 
     if (shakeAmt > 0.0005) {
       const t = performance.now() * 0.001;

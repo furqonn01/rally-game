@@ -17,6 +17,8 @@ Game offroad 3D berbasis browser yang dibangun dengan **Three.js** dan **Vite**.
 - **3 mode kamera** — Kamera Mobil (chase), Kamera Pengemudi (POV kabin), dan Kamera Bebas (orbit).
 - **HUD lengkap** — speedometer, indikator gigi/slip, timer, progres checkpoint, minimap real-time, dan FPS counter.
 - **Scenery & efek** — pepohonan, batu, rumput, partikel debu, sky dome atmosferik, dan fog.
+- **Suara mesin prosedural** — mesin diesel, kerikil, angin, road hum, dan benturan dibangkitkan lewat Web Audio API (tanpa file audio), dengan **akustik berbeda di dalam kabin vs di luar kabin**.
+- **Getaran roda & kamera** — tiap roda berguncang dan bergoyang mengikuti kekasaran medan, dan kamera ikut bergetar (paling keras di POV pengemudi).
 - **Kontrol keyboard + mouse** — setir, kamera, dan orbit bebas tanpa perlu pointer lock.
 
 ---
@@ -30,6 +32,7 @@ Game offroad 3D berbasis browser yang dibangun dengan **Three.js** dan **Vite**.
 | `A` `D` / `←` `→` | Belok kiri / kanan |
 | `Space` | Rem tangan (handbrake) |
 | `C` | Ganti mode kamera |
+| `M` | Suara hidup / mati |
 | `R` | Reset ke checkpoint terakhir |
 | `P` | Jeda / lanjut |
 | `Enter` | Mulai / ulangi permainan |
@@ -85,6 +88,7 @@ FnOffroad/
     ├── terrain.js      # Generator terrain prosedural + helper height/normal/slope
     ├── vehicle.js      # Loader model, fisika kendaraan, roda, suspensi, telemetri
     ├── cameras.js      # CameraRig: mode chase, POV pengemudi, dan orbit bebas
+    ├── audio.js        # Suara mesin/kerikil/angin prosedural (Web Audio) + profil kabin vs luar
     ├── track.js        # Kurva jalur, penempatan checkpoint, logika progres & respawn
     └── scenery.js      # Pohon, batu, rumput, dan sistem partikel debu
 ```
@@ -97,6 +101,7 @@ FnOffroad/
 2. **Dunia** — `Terrain` membangun mesh plane yang dideformasi fungsi ketinggian; `Track` membuat kurva tertutup dan menyebar 10 checkpoint di sepanjang jalur; `Scenery` menempatkan objek dekoratif di luar jalur.
 3. **Kendaraan** — `Vehicle` memuat GLB, memecah roda menjadi pivot terpisah, lalu setiap frame menghitung akselerasi, grip lateral (dibatasi `MAX_LAT_ACCEL`), rotasi yaw, dan suspensi.
 4. **Game loop** — input dibaca dari keyboard, fisika di-update, tabrakan checkpoint diperiksa, HUD & minimap digambar ulang, lalu scene dirender.
+5. **Suara & getaran** — `VehicleAudio` menyintesis mesin diesel (3 osilator + modulasi pembakaran), kerikil, angin, road hum, dan benturan; profil filter berubah otomatis antara kabin dan luar kabin. `Vehicle` juga menghitung kekasaran medan untuk mengguncang tiap roda dan menggetarkan kamera.
 
 ---
 
