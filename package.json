@@ -1,0 +1,29 @@
+{
+  "name": "bj40-offroad",
+  "version": "1.0.0",
+  "description": "Game offroad 3D berbasis browser: kendarai BAIC BJ40 melewati jalur liar dan checkpoint, dibangun dengan Three.js + Vite.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "threejs",
+    "webgl",
+    "offroad",
+    "racing",
+    "game",
+    "vite",
+    "3d"
+  ],
+  "author": "furqonn01",
+  "license": "ISC",
+  "dependencies": {
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.21"
+  }
+}

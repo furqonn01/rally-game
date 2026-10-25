@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>BAIC BJ40 — Petualangan Offroad</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden; background: #0a0d12;
+    font-family: "Segoe UI", "Inter", system-ui, -apple-system, sans-serif;
+    color: #f2f4f7; -webkit-user-select: none; user-select: none;
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  #hud {
+    position: fixed; inset: 0; pointer-events: none; z-index: 10;
+    opacity: 0; transition: opacity .6s ease;
+  }
+  #hud.visible { opacity: 1; }
+
+  .panel {
+    background: linear-gradient(160deg, rgba(12,16,22,.82), rgba(12,16,22,.62));
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 14px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 10px 30px rgba(0,0,0,.35);
+  }
+
+  /* ---------- top left : brand + camera mode ---------- */
+  #brand {
+    position: absolute; top: 18px; left: 18px; padding: 12px 16px 12px 14px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  #brand .bar { width: 4px; height: 34px; border-radius: 3px;
+    background: linear-gradient(180deg,#ffb347,#ff7a18); box-shadow: 0 0 14px rgba(255,140,40,.7); }
+  #brand .t1 { font-size: 15px; font-weight: 800; letter-spacing: 2.2px; line-height: 1.1; }
+  #brand .t2 { font-size: 10.5px; letter-spacing: 2.6px; color: #9fb0c4; margin-top: 3px; font-weight: 600; }
+
+  #camMode {
+    position: absolute; top: 18px; left: 50%; transform: translateX(-50%);
+    padding: 9px 20px; font-size: 11px; letter-spacing: 3px; font-weight: 700;
+    color: #ffd08a; display: flex; align-items: center; gap: 9px;
+  }
+  #camMode .dot { width: 7px; height: 7px; border-radius: 50%; background: #ffb347;
+    box-shadow: 0 0 10px #ffb347; }
+
+  /* ---------- top right : timer + checkpoints ---------- */
+  #stats { position: absolute; top: 18px; right: 18px; padding: 12px 16px; min-width: 186px; }
+  #stats .row { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; }
+  #stats .row + .row { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.07); }
+  #stats .lbl { font-size: 10px; letter-spacing: 2px; color: #90a1b5; font-weight: 700; }
+  #stats .val { font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .5px; }
+  #stats .val.amber { color: #ffbe5c; }
+  #stats .val.green { color: #6ee7a8; }
+
+  /* ---------- speedometer ---------- */
+  #speedo {
+    position: absolute; left: 18px; bottom: 18px; padding: 14px 20px 15px;
+    min-width: 208px;
+  }
+  #speedo .top { display: flex; align-items: flex-end; gap: 8px; }
+  #speedVal { font-size: 52px; font-weight: 800; line-height: .92; font-variant-numeric: tabular-nums;
+    letter-spacing: -1px; text-shadow: 0 0 26px rgba(255,170,60,.28); }
+  #speedUnit { font-size: 11px; letter-spacing: 2px; color: #8fa0b4; font-weight: 700; padding-bottom: 6px; }
+  #speedBarWrap { margin-top: 11px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.1); overflow: hidden; }
+  #speedBar { height: 100%; width: 0%; border-radius: 3px;
+    background: linear-gradient(90deg,#4ade80,#facc15 55%,#ff5b3d); transition: width .06s linear; }
+  #gearRow { display: flex; align-items: center; gap: 8px; margin-top: 11px; }
+  .chip {
+    font-size: 9.5px; font-weight: 800; letter-spacing: 1.6px; padding: 4px 9px; border-radius: 6px;
+    background: rgba(255,255,255,.08); color: #a8b8ca; border: 1px solid rgba(255,255,255,.08);
+  }
+  .chip.on { background: rgba(110,231,168,.16); color: #6ee7a8; border-color: rgba(110,231,168,.4); }
+  .chip.warn { background: rgba(255,91,61,.18); color: #ff8f78; border-color: rgba(255,91,61,.45); }
+
+  /* ---------- minimap ---------- */
+  #mapWrap {
+    position: absolute; right: 18px; bottom: 18px; padding: 10px;
+    display: flex; flex-direction: column; gap: 8px; align-items: center;
+  }
+  #minimap { width: 172px; height: 172px; border-radius: 10px; display: block; }
+  #mapWrap .cap { font-size: 9px; letter-spacing: 2.4px; color: #7d8fa4; font-weight: 700; }
+
+  /* ---------- controls hint ---------- */
+  #hint {
+    position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
+    padding: 9px 16px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+    justify-content: center; max-width: 44vw;
+  }
+  #hint .k { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: #93a5b9; font-weight: 600; }
+  #hint kbd {
+    font-family: inherit; font-size: 10px; font-weight: 800; letter-spacing: .5px;
+    background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.16);
+    border-bottom-width: 2px; border-radius: 5px; padding: 2.5px 6px; color: #e8eef6; min-width: 20px;
+    text-align: center;
+  }
+
+  /* ---------- toast ---------- */
+  #toast {
+    position: absolute; top: 96px; left: 50%; transform: translate(-50%, -14px);
+    padding: 13px 30px; border-radius: 12px; font-size: 15px; font-weight: 800; letter-spacing: 1.4px;
+    background: linear-gradient(135deg, rgba(255,150,40,.96), rgba(255,90,20,.96));
+    color: #180d02; box-shadow: 0 14px 40px rgba(255,110,20,.42);
+    opacity: 0; transition: opacity .3s ease, transform .3s cubic-bezier(.2,1.4,.5,1);
+    white-space: nowrap;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #toast.cool { background: linear-gradient(135deg, rgba(110,231,168,.96), rgba(45,190,130,.96)); color: #04140c;
+    box-shadow: 0 14px 40px rgba(45,200,140,.4); }
+
+  /* ---------- speed lines / vignette ---------- */
+  #vignette {
+    position: fixed; inset: 0; pointer-events: none; z-index: 9;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,.42) 100%);
+  }
+
+  /* ---------- overlays ---------- */
+  .overlay {
+    position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 26px; text-align: center;
+    background: radial-gradient(circle at 50% 38%, rgba(24,32,44,.86), rgba(6,8,12,.97));
+    backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
+    transition: opacity .5s ease; padding: 30px;
+  }
+  .overlay.hidden { opacity: 0; pointer-events: none; }
+
+  .hero-tag { font-size: 11px; letter-spacing: 6px; color: #ffb347; font-weight: 800; }
+  .hero-title {
+    font-size: clamp(30px, 5.4vw, 60px); font-weight: 900; letter-spacing: 2px; line-height: 1.02;
+    background: linear-gradient(180deg,#ffffff 25%,#93a7bd 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero-sub { font-size: 13.5px; color: #93a5b9; max-width: 540px; line-height: 1.75; }
+
+  .btn {
+    pointer-events: auto; cursor: pointer; border: 0; border-radius: 12px;
+    padding: 15px 46px; font-family: inherit; font-size: 13px; font-weight: 900; letter-spacing: 3px;
+    color: #180d02; background: linear-gradient(135deg,#ffc061,#ff7a18);
+    box-shadow: 0 12px 34px rgba(255,120,25,.42); transition: transform .16s ease, box-shadow .16s ease;
+  }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 18px 44px rgba(255,120,25,.55); }
+  .btn:active { transform: translateY(0) scale(.985); }
+  .btn.ghost { background: rgba(255,255,255,.09); color: #dbe4ee; box-shadow: none;
+    border: 1px solid rgba(255,255,255,.14); }
+
+  .keygrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); gap: 10px 22px;
+    max-width: 640px; width: 100%; text-align: left; }
+  .keygrid .item { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #a9bacd; }
+  .keygrid kbd {
+    font-family: inherit; font-size: 10.5px; font-weight: 800; background: rgba(255,255,255,.1);
+    border: 1px solid rgba(255,255,255,.16); border-bottom-width: 2px; border-radius: 5px;
+    padding: 3px 8px; color: #eef3f9; min-width: 26px; text-align: center; flex: none;
+  }
+
+  /* ---------- loading ---------- */
+  #loading { z-index: 50; }
+  #loadBarWrap { width: min(420px, 74vw); height: 6px; border-radius: 4px; background: rgba(255,255,255,.1); overflow: hidden; }
+  #loadBar { height: 100%; width: 0%; border-radius: 4px;
+    background: linear-gradient(90deg,#ffb347,#ff7a18); transition: width .25s ease; box-shadow: 0 0 18px rgba(255,140,40,.75); }
+  #loadText { font-size: 11px; letter-spacing: 3px; color: #8fa0b4; font-weight: 700; }
+  .spinner {
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 3px solid rgba(255,255,255,.12); border-top-color: #ffb347;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #fps {
+    position: absolute; left: 50%; bottom: 62px; transform: translateX(-50%);
+    font-size: 9.5px; letter-spacing: 2px; color: rgba(160,180,200,.55); font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (max-width: 900px) {
+    #hint { display: none; }
+    #minimap { width: 128px; height: 128px; }
+    #speedVal { font-size: 40px; }
+    #stats { min-width: 150px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="vignette"></div>
+
+<div id="hud">
+  <div id="brand" class="panel">
+    <div class="bar"></div>
+    <div>
+      <div class="t1">BAIC BJ40</div>
+      <div class="t2">PETUALANGAN OFFROAD</div>
+    </div>
+  </div>
+
+  <div id="camMode" class="panel"><span class="dot"></span><span id="camModeText">KAMERA: MOBIL</span></div>
+
+  <div id="stats" class="panel">
+    <div class="row"><span class="lbl">WAKTU</span><span class="val" id="timeVal">00:00.0</span></div>
+    <div class="row"><span class="lbl">CHECKPOINT</span><span class="val amber" id="cpVal">0 / 10</span></div>
+    <div class="row"><span class="lbl">REKOR</span><span class="val green" id="bestVal">--:--.-</span></div>
+  </div>
+
+  <div id="speedo" class="panel">
+    <div class="top">
+      <div id="speedVal">0</div>
+      <div id="speedUnit">KM/JAM</div>
+    </div>
+    <div id="speedBarWrap"><div id="speedBar"></div></div>
+    <div id="gearRow">
+      <span class="chip" id="gearChip">N</span>
+      <span class="chip on" id="driveChip">4WD</span>
+      <span class="chip" id="airChip">UDARA</span>
+    </div>
+  </div>
+
+  <div id="mapWrap" class="panel">
+    <canvas id="minimap" width="344" height="344"></canvas>
+    <div class="cap">PETA RUTE</div>
+  </div>
+
+  <div id="hint" class="panel">
+    <span class="k"><kbd>W</kbd> Gas</span>
+    <span class="k"><kbd>S</kbd> Rem</span>
+    <span class="k"><kbd>A</kbd><kbd>D</kbd> Belok</span>
+    <span class="k"><kbd>Space</kbd> Rem Tangan</span>
+    <span class="k"><kbd>C</kbd> Kamera</span>
+    <span class="k"><kbd>R</kbd> Reset</span>
+    <span class="k"><kbd>P</kbd> Jeda</span>
+  </div>
+
+  <div id="toast"></div>
+  <div id="fps"></div>
+</div>
+
+<div id="loading" class="overlay">
+  <div class="spinner"></div>
+  <div class="hero-tag">MENYIAPKAN PETUALANGAN</div>
+  <div id="loadBarWrap"><div id="loadBar"></div></div>
+  <div id="loadText">MEMUAT MODEL BAIC BJ40 — 0%</div>
+</div>
+
+<div id="start" class="overlay hidden">
+  <div class="hero-tag">SELAMAT DATANG DI JALUR LIAR</div>
+  <div class="hero-title">BAIC BJ40<br/>PETUALANGAN OFFROAD</div>
+  <div class="hero-sub">
+    Jelajahi perbukitan liar dengan BAIC BJ40. Lewati seluruh checkpoint berurutan
+    secepat mungkin, taklukkan tanjakan dan gundukan, dan jangan terjungkal.
+    Kamu bisa berpindah antara <b>kamera kabin (POV pengemudi)</b> dan <b>kamera mobil</b> kapan saja.
+  </div>
+  <div class="keygrid">
+    <div class="item"><kbd>W</kbd> Gas / maju</div>
+    <div class="item"><kbd>S</kbd> Rem &amp; mundur</div>
+    <div class="item"><kbd>A</kbd> <kbd>D</kbd> Belok kiri / kanan</div>
+    <div class="item"><kbd>Space</kbd> Rem tangan</div>
+    <div class="item"><kbd>C</kbd> Ganti kamera</div>
+    <div class="item"><kbd>R</kbd> Reset ke checkpoint</div>
+    <div class="item"><kbd>P</kbd> Jeda / lanjut</div>
+    <div class="item"><kbd>Mouse</kbd> Lihat sekeliling</div>
+  </div>
+  <button class="btn" id="startBtn">MULAI PETUALANGAN</button>
+</div>
+
+<div id="pause" class="overlay hidden">
+  <div class="hero-tag">JEDA</div>
+  <div class="hero-title">ISTIRAHAT SEJENAK</div>
+  <div class="hero-sub">Tekan <b>P</b> atau klik tombol di bawah untuk melanjutkan perjalanan.</div>
+  <button class="btn" id="resumeBtn">LANJUTKAN</button>
+  <button class="btn ghost" id="restartBtn">ULANG DARI AWAL</button>
+</div>
+
+<div id="finish" class="overlay hidden">
+  <div class="hero-tag">PETUALANGAN SELESAI</div>
+  <div class="hero-title">SEMUA CHECKPOINT<br/>TERLEWATI!</div>
+  <div class="hero-sub" id="finishSub">Waktu kamu: 00:00.0</div>
+  <button class="btn" id="againBtn">ULANGI PETUALANGAN</button>
+</div>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
