@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { terrainHeight, terrainNormal } from './terrain.js';
 
 // ---------------------------------------------------------------------------
@@ -247,6 +248,9 @@ export class Vehicle {
   // -------------------------------------------------------------------------
   async load(url, onProgress) {
     const loader = new GLTFLoader();
+    // Model GLB dikompresi dengan gltfpack (meshopt). Decoder wajib didaftarkan
+    // sebelum loadAsync, kalau tidak EXT_meshopt_compression akan gagal.
+    loader.setMeshoptDecoder(MeshoptDecoder);
     const gltf = await loader.loadAsync(url, (e) => {
       if (onProgress && e.total) onProgress(e.loaded / e.total);
     });
