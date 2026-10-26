@@ -65,6 +65,17 @@ const MAX_STEER = 0.44;
 const MAX_LAT_ACCEL = 11.5;
 
 // ---------------------------------------------------------------------------
+// Perpindahan berat bodi (squat & dive)
+// ---------------------------------------------------------------------------
+// rad per (m/s²) percepatan memanjang, dan batas sudutnya. Gas membuat
+// moncong terangkat (squat) sedikit; rem membuat moncong menunduk (dive)
+// lebih dalam — persis seperti mobil sungguhan.
+const SQUAT_GAIN = 0.0022;   // rad per m/s² saat berakselerasi
+const SQUAT_MAX = 0.045;     // rad (~2,6°)
+const DIVE_GAIN = 0.0024;    // rad per m/s² saat mengerem
+const DIVE_MAX = 0.075;      // rad (~4,3°)
+
+// ---------------------------------------------------------------------------
 // Utilitas pemecahan geometri roda
 // ---------------------------------------------------------------------------
 function buildGeometry(src, indices) {
@@ -481,20 +492,31 @@ export class Vehicle {
 
     let accel = 0;
 
+    // `driveAccel` = bagian percepatan yang murni berasal dari mesin & rem.
+    // Dipisahkan karena hanya inilah yang boleh menggeser berat bodi
+    // (squat/dive). Gravitasi lereng dan hambatan tidak boleh ikut, sebab bodi
+    // sudah mengikuti kemiringan medan lewat kuaternion root — kalau ikut
+    // dihitung, mobil yang diam di tanjakan akan terus "menunduk" palsu.
+    let driveAccel = 0;
+
     if (throttle) {
       const v = Math.abs(this.speed);
       const powerCurve = 1 - Math.min(1, v / 34) * 0.72;
       accel += 13.5 * powerCurve;
+      driveAccel += 13.5 * powerCurve;
     }
     if (brake) {
       if (this.speed > 0.6) {
         accel -= 24;
+        driveAccel -= 24;
       } else {
         accel -= 7.5; // mundur
+        driveAccel -= 7.5;
       }
     }
     if (handbrake) {
       accel -= Math.sign(this.speed) * 26;
+      driveAccel -= Math.sign(this.speed) * 26;
     }
 
     // hambatan udara + gelinding
@@ -639,10 +661,26 @@ export class Vehicle {
     this.quat.slerp(this.targetQuat, align);
 
     // ---------- roll & pitch kosmetik ----------
+    // Perpindahan berat (weight transfer). Konvensi tanda:
+    //   body.rotation.set(pitch, 0, roll) pada sumbu lokal mobil, dengan
+    //   -Z = maju, +X = kanan. Rotasi +pitch pada sumbu X mengangkat moncong,
+    //   jadi PITCH POSITIF = MONCONG NAIK.
+    //   Gas (driveAccel > 0) -> moncong naik / buritan jongkok  -> pitch > 0.
+    //   Rem  (driveAccel < 0) -> moncong turun / buritan terangkat -> pitch < 0.
+    // Karena itu tandanya positif, bukan negatif (dulu terbalik: gas malah
+    // mengangkat buritan).
     const yawRateNow = this.yawRateEff;
     const latAccel = this.speed * yawRateNow;
+    // Belok kiri (latAccel > 0) -> bodi miring ke kanan (sisi kanan turun),
+    // jadi roll negatif. Tanda ini sudah benar.
     const rollTarget = THREE.MathUtils.clamp(-latAccel * 0.009, -0.11, 0.11);
-    const pitchTarget = THREE.MathUtils.clamp(-accel * 0.004, -0.06, 0.06);
+
+    // Di mobil sungguhan, rem membuat moncong menunduk lebih dalam daripada
+    // saat gas (dive > squat). Sudut gas dibuat lebih kecil dari sudut rem.
+    const driving = this.grounded ? driveAccel : 0;
+    const pitchTarget = driving >= 0
+      ? THREE.MathUtils.clamp(driving * SQUAT_GAIN, 0, SQUAT_MAX)
+      : THREE.MathUtils.clamp(driving * DIVE_GAIN, -DIVE_MAX, 0);
 
     this.bodyRoll += (rollTarget - this.bodyRoll) * (1 - Math.exp(-7 * dt));
     this.bodyPitch += (pitchTarget - this.bodyPitch) * (1 - Math.exp(-7 * dt));
@@ -673,11 +711,18 @@ export class Vehicle {
       w.pivot.rotation.y = w.front ? this.steer : 0;
       if (w.spinner) w.spinner.rotation.x = spin;
 
-      // suspensi visual
+      // Suspensi visual.
+      // Bodi (root) SUDAH dimiringkan mengikuti bidang medan lewat keempat
+      // titik roda, jadi dasar ban otomatis hampir menempel tanah. Yang belum
+      // tertangani hanyalah komponen "twist" diagonal (FL+RR vs FR+RL) yang
+      // tidak bisa diikuti bidang kaku. Itu saja yang diserap suspensi —
+      // kalau seluruh selisih tinggi ikut dimasukkan, roda akan terbenam di
+      // satu sisi dan melayang di sisi lain (dulu ±17 cm di lereng 21°).
       let off = 0;
       if (this.grounded) {
-        const wWorldY = this.pos.y + (heights[k] - groundY) * 0.5;
-        off = THREE.MathUtils.clamp((heights[k] - wWorldY) * 0.75, -0.16, 0.16);
+        const twist = (hFL + hRR - hFR - hRL) * 0.25; // meter, 0 di bidang datar
+        const tw = (k === 0 || k === 3) ? 1 : -1;     // FL & RR naik bila twist > 0
+        off = THREE.MathUtils.clamp(twist * tw, -0.09, 0.09);
       }
       this.suspension[k] += (off - this.suspension[k]) * (1 - Math.exp(-16 * dt));
 

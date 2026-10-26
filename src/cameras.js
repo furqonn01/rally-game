@@ -14,6 +14,10 @@ const _v4 = new THREE.Vector3();
 const _qBody = new THREE.Quaternion();
 const _qLook = new THREE.Quaternion();
 const _qVib = new THREE.Quaternion();
+const _vUp = new THREE.Vector3();
+const _vUpT = new THREE.Vector3();
+const _vAxis = new THREE.Vector3();
+const _qUp = new THREE.Quaternion();
 const _e1 = new THREE.Euler(0, 0, 0, 'YXZ');
 const _eVib = new THREE.Euler(0, 0, 0, 'YXZ');
 
@@ -56,6 +60,11 @@ const EXT_LP = 3.4;           // rad/s — tapis tambahan untuk kamera luar
 const MAX_ROLL = 0.075;       // rad
 const MAX_PITCH = 0.058;      // rad
 const MAX_HEAVE = 0.045;      // m
+
+// Sebagian kemiringan medan ditularkan ke sumbu "atas" kamera (0 = horizon
+// selalu rata seperti sebelum perbaikan, 1 = horizon ikut sasis penuh).
+// 0.7 cukup membuat lereng 21° terbaca miring di layar tanpa memicu mual.
+const CAM_UP_BLEND = 0.7;
 
 const clamp = THREE.MathUtils.clamp;
 
@@ -114,6 +123,13 @@ export class CameraRig {
     this.intensity = 0;
     this.fovBase = 62;
     this.initialized = false;
+
+    // Vektor "atas" kamera yang mengikuti kemiringan medan. Kalau dipaku ke
+    // (0,1,0), mobil yang menanjak 21° tetap tampil seperti di jalan datar
+    // karena horizon di layar tidak ikut miring — inilah yang membuat lereng
+    // terasa "tidak seperti realita". Nilainya dihaluskan dan dibatasi supaya
+    // tidak memicu mual (kamera miring penuh 21° terlalu ekstrem).
+    this.camUp = new THREE.Vector3(0, 1, 0);
 
     // ---- state getaran (berbasis sinyal roda, bukan waktu absolut) ----
     this.noisePos = 0;             // posisi noise kanal cepat (maju per meter)
@@ -353,6 +369,42 @@ export class CameraRig {
     cam.near = 0.04;
   }
 
+  // ---------------- vektor "atas" kamera yang mengikuti medan ----------------
+  // Mengembalikan (lewat this.camUp) arah atas untuk lookAt. Kita ambil sumbu
+  // up bodi mobil (yang sudah mengikuti bidang medan), lalu dicampur dengan
+  // up dunia dan dibatasi sudutnya. Hasil: di lereng 20°, horizon di layar
+  // ikut miring ~8-9° saja — cukup untuk terbaca "medan miring", tapi tidak
+  // sampai membuat pandangan jungkir seperti kamera yang dipaku ke sasis.
+  updateCamUp(dt) {
+    const v = this.vehicle;
+    _vUpT.set(0, 1, 0);
+
+    if (v.loaded) {
+      // kolom ke-1 matriks dunia root = sumbu up mobil
+      _vUp.setFromMatrixColumn(v.root.matrixWorld, 1).normalize();
+
+      const dot = THREE.MathUtils.clamp(_vUp.dot(_vUpT), -1, 1);
+      const angle = Math.acos(dot);
+      const MAX_TILT = 0.16; // rad (~9°)
+
+      if (angle > 1e-4) {
+        // sumbu rotasi dari up dunia menuju up mobil
+        _vAxis.crossVectors(_vUpT, _vUp);
+        if (_vAxis.lengthSq() > 1e-8) {
+          _vAxis.normalize();
+          // hanya ikuti sebagian kemiringan, dan jangan lebih dari MAX_TILT
+          const effective = Math.min(angle * CAM_UP_BLEND, MAX_TILT);
+          _qUp.setFromAxisAngle(_vAxis, effective);
+          _vUpT.applyQuaternion(_qUp).normalize();
+        }
+      }
+    }
+
+    this.camUp.lerp(_vUpT, 1 - Math.exp(-3.5 * dt)).normalize();
+    if (this.camUp.lengthSq() < 1e-6) this.camUp.set(0, 1, 0);
+    return this.camUp;
+  }
+
   // ---------------- chase (kamera mobil) ----------------
   updateChase(dt, shakeAmt) {
     const v = this.vehicle;
@@ -407,7 +459,7 @@ export class CameraRig {
     }
 
     cam.near = 0.15;
-    cam.up.set(0, 1, 0);
+    cam.up.copy(this.updateCamUp(dt));
     cam.lookAt(this.chaseLook);
   }
 
@@ -446,7 +498,7 @@ export class CameraRig {
     }
 
     cam.near = 0.15;
-    cam.up.set(0, 1, 0);
+    cam.up.copy(this.updateCamUp(dt));
     cam.lookAt(_v3.set(v.pos.x, v.pos.y + 1.05, v.pos.z));
   }
 
@@ -457,6 +509,7 @@ export class CameraRig {
   snapToCar() {
     this.initialized = false;
     // buang sisa ringing supaya kamera tidak "bergetar hantu" setelah respawn
+    this.camUp.set(0, 1, 0);
     this.sRoll.x = 0; this.sRoll.v = 0;
     this.sPitch.x = 0; this.sPitch.v = 0;
     this.sHeave.x = 0; this.sHeave.v = 0;
