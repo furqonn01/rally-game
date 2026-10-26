@@ -54,6 +54,7 @@
   #stats .val { font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .5px; }
   #stats .val.amber { color: #ffbe5c; }
   #stats .val.green { color: #6ee7a8; }
+  #stats .row.hide { display: none; }
 
   /* ---------- speedometer ---------- */
   #speedo {
@@ -122,9 +123,10 @@
     align-items: center; justify-content: center; gap: 26px; text-align: center;
     background: radial-gradient(circle at 50% 38%, rgba(24,32,44,.86), rgba(6,8,12,.97));
     backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
-    transition: opacity .5s ease; padding: 30px;
+    transition: opacity .5s ease, visibility .5s ease; padding: 30px;
   }
-  .overlay.hidden { opacity: 0; pointer-events: none; }
+  .overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+  .overlay.hidden * { pointer-events: none; }
 
   .hero-tag { font-size: 11px; letter-spacing: 6px; color: #ffb347; font-weight: 800; }
   .hero-title {
@@ -144,6 +146,30 @@
   .btn:active { transform: translateY(0) scale(.985); }
   .btn.ghost { background: rgba(255,255,255,.09); color: #dbe4ee; box-shadow: none;
     border: 1px solid rgba(255,255,255,.14); }
+
+  /* ---------- pemilihan mode ---------- */
+  .modegrid {
+    display: grid; grid-template-columns: repeat(2, minmax(230px, 300px)); gap: 16px;
+    justify-content: center; width: 100%;
+  }
+  .modecard {
+    pointer-events: auto; cursor: pointer; text-align: left; font-family: inherit; color: inherit;
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 20px 20px 18px; border-radius: 16px;
+    background: linear-gradient(160deg, rgba(22,30,42,.94), rgba(10,14,20,.88));
+    border: 1px solid rgba(255,255,255,.10);
+    transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+  }
+  .modecard:hover { transform: translateY(-3px); border-color: rgba(255,179,71,.55);
+    box-shadow: 0 18px 44px rgba(255,120,25,.22); }
+  .modecard:active { transform: translateY(-1px) scale(.99); }
+  .modecard .mtag { font-size: 9.5px; letter-spacing: 2.6px; font-weight: 800; color: #ffb347; }
+  .modecard .mname { font-size: 22px; font-weight: 900; letter-spacing: 1.6px; }
+  .modecard .mdesc { font-size: 12px; line-height: 1.6; color: #93a5b9; }
+  .modecard .mlist { font-size: 9.5px; letter-spacing: 1.7px; color: #6ee7a8; font-weight: 800; margin-top: 2px; }
+  .modecard.timer .mtag { color: #7fdcff; }
+  .modecard.timer .mlist { color: #ffbe5c; }
+  @media (max-width: 720px) { .modegrid { grid-template-columns: 1fr; max-width: 300px; } }
 
   .keygrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); gap: 10px 22px;
     max-width: 640px; width: 100%; text-align: left; }
@@ -197,9 +223,11 @@
   <div id="camMode" class="panel"><span class="dot"></span><span id="camModeText">KAMERA: MOBIL</span></div>
 
   <div id="stats" class="panel">
-    <div class="row"><span class="lbl">WAKTU</span><span class="val" id="timeVal">00:00.0</span></div>
-    <div class="row"><span class="lbl">CHECKPOINT</span><span class="val amber" id="cpVal">0 / 10</span></div>
-    <div class="row"><span class="lbl">REKOR</span><span class="val green" id="bestVal">--:--.-</span></div>
+    <div class="row"><span class="lbl">MODE</span><span class="val" id="modeVal">TIMER</span></div>
+    <div class="row"><span class="lbl" id="timeLbl">WAKTU</span><span class="val" id="timeVal">00:00.0</span></div>
+    <div class="row" id="distRow"><span class="lbl">JARAK</span><span class="val" id="distVal">0 M</span></div>
+    <div class="row" id="cpRow"><span class="lbl">CHECKPOINT</span><span class="val amber" id="cpVal">0 / 10</span></div>
+    <div class="row" id="bestRow"><span class="lbl">REKOR</span><span class="val green" id="bestVal">--:--.-</span></div>
   </div>
 
   <div id="speedo" class="panel">
@@ -217,7 +245,7 @@
 
   <div id="mapWrap" class="panel">
     <canvas id="minimap" width="344" height="344"></canvas>
-    <div class="cap">PETA RUTE</div>
+    <div class="cap" id="mapCap">PETA RUTE</div>
   </div>
 
   <div id="hint" class="panel">
@@ -229,6 +257,7 @@
     <span class="k"><kbd>M</kbd> Suara</span>
     <span class="k"><kbd>R</kbd> Reset</span>
     <span class="k"><kbd>P</kbd> Jeda</span>
+    <span class="k"><kbd>Esc</kbd> Menu</span>
   </div>
 
   <div id="toast"></div>
@@ -246,10 +275,33 @@
   <div class="hero-tag">SELAMAT DATANG DI JALUR LIAR</div>
   <div class="hero-title">BAIC BJ40<br/>PETUALANGAN OFFROAD</div>
   <div class="hero-sub">
-    Jelajahi perbukitan liar dengan BAIC BJ40. Lewati seluruh checkpoint berurutan
-    secepat mungkin, taklukkan tanjakan dan gundukan, dan jangan terjungkal.
-    Kamu bisa berpindah antara <b>kamera kabin (POV pengemudi)</b> dan <b>kamera mobil</b> kapan saja.
+    Pilih cara kamu menjelajahi perbukitan liar: bebas tanpa tekanan, atau balapan
+    melawan waktu melewati seluruh checkpoint. Kamu bisa berpindah antara
+    <b>kamera kabin (POV pengemudi)</b> dan <b>kamera mobil</b> kapan saja.
   </div>
+
+  <div class="modegrid">
+    <button class="modecard freeroam" id="freeRoamBtn">
+      <div class="mtag">MODE 1</div>
+      <div class="mname">FREE ROAM</div>
+      <div class="mdesc">
+        Jelajahi seluruh medan tanpa checkpoint dan tanpa tekanan waktu.
+        Cocok untuk latihan, cari jalur seru, atau sekadar menikmati pemandangan.
+      </div>
+      <div class="mlist">TANPA TIMER · TANPA CHECKPOINT</div>
+    </button>
+
+    <button class="modecard timer" id="timerBtn">
+      <div class="mtag">MODE 2</div>
+      <div class="mname">MODE TIMER</div>
+      <div class="mdesc">
+        Lewati 10 checkpoint berurutan secepat mungkin. Waktu berjalan terus
+        dan rekor terbaikmu tersimpan otomatis.
+      </div>
+      <div class="mlist">10 CHECKPOINT · CATAT REKOR</div>
+    </button>
+  </div>
+
   <div class="keygrid">
     <div class="item"><kbd>W</kbd> Gas / maju</div>
     <div class="item"><kbd>S</kbd> Rem &amp; mundur</div>
@@ -257,11 +309,11 @@
     <div class="item"><kbd>Space</kbd> Rem tangan</div>
     <div class="item"><kbd>C</kbd> Ganti kamera</div>
     <div class="item"><kbd>M</kbd> Suara hidup / mati</div>
-    <div class="item"><kbd>R</kbd> Reset ke checkpoint</div>
+    <div class="item"><kbd>R</kbd> Reset kendaraan</div>
     <div class="item"><kbd>P</kbd> Jeda / lanjut</div>
+    <div class="item"><kbd>Esc</kbd> Kembali ke menu mode</div>
     <div class="item"><kbd>Mouse</kbd> Lihat sekeliling</div>
   </div>
-  <button class="btn" id="startBtn">MULAI PETUALANGAN</button>
 </div>
 
 <div id="pause" class="overlay hidden">
@@ -269,14 +321,17 @@
   <div class="hero-title">ISTIRAHAT SEJENAK</div>
   <div class="hero-sub">Tekan <b>P</b> atau klik tombol di bawah untuk melanjutkan perjalanan.</div>
   <button class="btn" id="resumeBtn">LANJUTKAN</button>
-  <button class="btn ghost" id="restartBtn">ULANG DARI AWAL</button>
+  <button class="btn ghost" id="restartBtn">ULANG MODE INI</button>
+  <button class="btn ghost" id="pauseMenuBtn">GANTI MODE</button>
 </div>
 
 <div id="finish" class="overlay hidden">
   <div class="hero-tag">PETUALANGAN SELESAI</div>
   <div class="hero-title">SEMUA CHECKPOINT<br/>TERLEWATI!</div>
   <div class="hero-sub" id="finishSub">Waktu kamu: 00:00.0</div>
-  <button class="btn" id="againBtn">ULANGI PETUALANGAN</button>
+  <button class="btn" id="againBtn">ULANGI TIMER</button>
+  <button class="btn ghost" id="finishFreeBtn">LANJUT FREE ROAM</button>
+  <button class="btn ghost" id="finishMenuBtn">GANTI MODE</button>
 </div>
 
 <script type="module" src="/src/main.js"></script>

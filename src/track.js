@@ -44,6 +44,7 @@ export class Track {
     }
 
     this.checkpoints = [];
+    this.gatesVisible = true;
     this.buildCheckpoints();
     this.buildRouteRibbon();
   }
@@ -276,6 +277,33 @@ export class Track {
     return {
       pos: new THREE.Vector3(x, terrainHeight(x, z), z),
       yaw,
+    };
+  }
+
+  /** Tampilkan / sembunyikan seluruh gerbang checkpoint (mode Free Roam). */
+  setGatesVisible(v) {
+    this.gatesVisible = !!v;
+    for (const cp of this.checkpoints) cp.node.visible = !!v;
+  }
+
+  /** Titik rute terdekat — dipakai respawn Free Roam. */
+  nearestOnRoute(pos) {
+    let bi = 0;
+    let bd = Infinity;
+    for (let i = 0; i < this.samples.length; i++) {
+      const s = this.samples[i];
+      const dx = s.x - pos.x;
+      const dz = s.z - pos.z;
+      const d = dx * dx + dz * dz;
+      if (d < bd) { bd = d; bi = i; }
+    }
+    const s = this.samples[bi];
+    const n = this.samples[(bi + 1) % this.samples.length];
+    const tan = new THREE.Vector3(n.x - s.x, 0, n.z - s.z).normalize();
+    return {
+      index: bi,
+      pos: new THREE.Vector3(s.x, terrainHeight(s.x, s.z), s.z),
+      yaw: Math.atan2(-tan.x, -tan.z),
     };
   }
 

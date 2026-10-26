@@ -113,9 +113,16 @@ const audio = new VehicleAudio();
 const el = {
   hud: document.getElementById('hud'),
   camModeText: document.getElementById('camModeText'),
+  modeVal: document.getElementById('modeVal'),
+  timeLbl: document.getElementById('timeLbl'),
   timeVal: document.getElementById('timeVal'),
+  distRow: document.getElementById('distRow'),
+  distVal: document.getElementById('distVal'),
+  cpRow: document.getElementById('cpRow'),
   cpVal: document.getElementById('cpVal'),
+  bestRow: document.getElementById('bestRow'),
   bestVal: document.getElementById('bestVal'),
+  mapCap: document.getElementById('mapCap'),
   speedVal: document.getElementById('speedVal'),
   speedBar: document.getElementById('speedBar'),
   gearChip: document.getElementById('gearChip'),
@@ -133,6 +140,12 @@ const el = {
 
 const BEST_KEY = 'bj40-offroad-best-v1';
 let bestTime = parseFloat(localStorage.getItem(BEST_KEY) || '') || 0;
+
+function fmtDist(m) {
+  if (!isFinite(m) || m <= 0) return '0 M';
+  if (m < 1000) return Math.round(m) + ' M';
+  return (m / 1000).toFixed(2) + ' KM';
+}
 
 function fmtTime(sec) {
   if (!isFinite(sec) || sec <= 0) return '--:--.-';
@@ -201,14 +214,6 @@ mapStatic.width = mapStatic.height = MAP_S;
   g.lineWidth = 3;
   g.stroke();
 
-  // titik checkpoint
-  for (const cp of track.checkpoints) {
-    g.beginPath();
-    g.arc(mx(cp.pos.x), mz(cp.pos.z), 4.5, 0, Math.PI * 2);
-    g.fillStyle = 'rgba(255,255,255,0.35)';
-    g.fill();
-  }
-
   // bingkai
   g.strokeStyle = 'rgba(255,255,255,0.10)';
   g.lineWidth = 2;
@@ -221,6 +226,7 @@ function drawMinimap() {
   g.drawImage(mapStatic, 0, 0);
 
   for (let i = 0; i < track.checkpoints.length; i++) {
+    if (state.gameMode !== 'timer') break;
     const cp = track.checkpoints[i];
     const px = mx(cp.pos.x), py = mz(cp.pos.z);
     const next = i === track.nextIndex && !cp.passed;
@@ -272,7 +278,14 @@ function drawMinimap() {
 const keys = Object.create(null);
 const input = { forward: false, back: false, left: false, right: false, handbrake: false };
 
-const state = { mode: 'loading', elapsed: 0, frames: 0, fpsTimer: 0 };
+const state = {
+  mode: 'loading',       // loading | menu | playing | paused | finished
+  gameMode: 'timer',     // timer | freeroam
+  elapsed: 0,
+  distance: 0,
+  frames: 0,
+  fpsTimer: 0,
+};
 
 function readInput() {
   input.forward = !!(keys['KeyW'] || keys['ArrowUp']);
@@ -295,13 +308,16 @@ window.addEventListener('keydown', (e) => {
       const muted = audio.toggleMute();
       toast(muted ? 'SUARA: MATI' : 'SUARA: HIDUP', !muted);
     } else if (e.code === 'KeyR') {
-      if (state.mode === 'playing' || state.mode === 'paused') respawnAtCheckpoint();
+      if (state.mode === 'playing' || state.mode === 'paused') respawn();
     } else if (e.code === 'KeyP') {
       if (state.mode === 'playing') pauseGame();
       else if (state.mode === 'paused') resumeGame();
+    } else if (e.code === 'Escape') {
+      if (state.mode === 'playing' || state.mode === 'paused' || state.mode === 'finished') backToMenu();
     } else if (e.code === 'Enter') {
-      if (state.mode === 'ready') startGame();
-      else if (state.mode === 'finished') restartGame();
+      if (state.mode === 'menu') startMode('timer');
+      else if (state.mode === 'finished') startMode('timer');
+      else if (state.mode === 'paused') resumeGame();
     }
   }
 
@@ -340,7 +356,7 @@ renderer.domElement.addEventListener('wheel', (e) => {
 }, { passive: true });
 
 // ---------------------------------------------------------------------------
-// Alur permainan
+// Alur permainan: menu mode → bermain → jeda / selesai → kembali ke menu
 // ---------------------------------------------------------------------------
 let startPos = new THREE.Vector3(0, 0, 40);
 let startYaw = 0;
@@ -353,17 +369,69 @@ function computeStart() {
   startYaw = Math.atan2(-tan.x, -tan.z);
 }
 
-function startGame() {
+/** Sesuaikan HUD dengan mode yang sedang dimainkan. */
+function applyModeUI() {
+  const free = state.gameMode === 'freeroam';
+
+  el.modeVal.textContent = free ? 'FREE ROAM' : 'TIMER';
+  el.modeVal.classList.toggle('amber', !free);
+  el.modeVal.classList.toggle('green', free);
+
+  el.timeLbl.textContent = free ? 'DURASI' : 'WAKTU';
+  el.distRow.classList.toggle('hide', !free);
+  el.cpRow.classList.toggle('hide', free);
+  el.bestRow.classList.toggle('hide', free);
+  el.mapCap.textContent = free ? 'PETA MEDAN' : 'PETA RUTE';
+
+  // gerbang checkpoint hanya relevan di mode timer
+  track.setGatesVisible(!free);
+}
+
+function startMode(mode) {
+  state.gameMode = mode === 'freeroam' ? 'freeroam' : 'timer';
+
   el.start.classList.add('hidden');
   el.finish.classList.add('hidden');
   el.pause.classList.add('hidden');
   el.hud.classList.add('visible');
-  state.mode = 'playing';
+
+  track.resetStates();
+  dust.clear();
+  computeStart();
+  vehicle.reset(startPos, startYaw);
+  camRig.snapToCar();
+
   state.elapsed = 0;
+  state.distance = 0;
+  state.mode = 'playing';
+
+  el.cpVal.textContent = '0 / ' + CHECKPOINT_COUNT;
+  el.distVal.textContent = fmtDist(0);
+  el.timeVal.textContent = fmtTime(0);
+
+  applyModeUI();
+
   audio.setMode(camRig.mode);
   audio.setPaused(false);
   audio.init();
-  toast('GO! LEWATI SEMUA CHECKPOINT', true);
+
+  toast(
+    state.gameMode === 'freeroam'
+      ? 'FREE ROAM — JELAJAHI BEBAS'
+      : 'GO! LEWATI SEMUA CHECKPOINT',
+    true
+  );
+}
+
+function backToMenu() {
+  state.mode = 'menu';
+  audio.setPaused(true);
+  el.pause.classList.add('hidden');
+  el.finish.classList.add('hidden');
+  el.hud.classList.remove('visible');
+  el.start.classList.remove('hidden');
+  for (const k in keys) keys[k] = false;
+  readInput();
 }
 
 function pauseGame() {
@@ -382,24 +450,20 @@ function resumeGame() {
 }
 
 function restartGame() {
-  track.resetStates();
-  dust.clear();
-  computeStart();
-  vehicle.reset(startPos, startYaw);
-  camRig.snapToCar();
-  el.finish.classList.add('hidden');
-  el.pause.classList.add('hidden');
-  el.start.classList.add('hidden');
-  el.hud.classList.add('visible');
-  state.elapsed = 0;
-  state.mode = 'playing';
-  el.cpVal.textContent = '0 / ' + CHECKPOINT_COUNT;
-  audio.setMode(camRig.mode);
-  audio.setPaused(false);
-  toast('PETUALANGAN DIMULAI ULANG', true);
+  startMode(state.gameMode);
 }
 
-function respawnAtCheckpoint() {
+function respawn() {
+  if (state.gameMode === 'freeroam') {
+    // Free roam: taruh kembali di titik rute terdekat agar tidak tersangkut.
+    const r = track.nearestOnRoute(vehicle.pos);
+    vehicle.reset(r.pos, r.yaw);
+    camRig.snapToCar();
+    dust.clear();
+    toast('KENDARAAN DIKEMBALIKAN KE JALUR');
+    return;
+  }
+
   const r = track.respawn();
   vehicle.reset(r.pos, r.yaw);
   camRig.snapToCar();
@@ -426,10 +490,14 @@ function finishRun() {
   toast('SELAMAT! SEMUA CHECKPOINT TERLEWATI', true);
 }
 
-document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('freeRoamBtn').addEventListener('click', () => startMode('freeroam'));
+document.getElementById('timerBtn').addEventListener('click', () => startMode('timer'));
 document.getElementById('resumeBtn').addEventListener('click', resumeGame);
 document.getElementById('restartBtn').addEventListener('click', restartGame);
-document.getElementById('againBtn').addEventListener('click', restartGame);
+document.getElementById('pauseMenuBtn').addEventListener('click', backToMenu);
+document.getElementById('againBtn').addEventListener('click', () => startMode('timer'));
+document.getElementById('finishFreeBtn').addEventListener('click', () => startMode('freeroam'));
+document.getElementById('finishMenuBtn').addEventListener('click', backToMenu);
 
 window.addEventListener('blur', () => {
   for (const k in keys) keys[k] = false;
@@ -482,7 +550,8 @@ async function boot() {
 
   el.loading.classList.add('hidden');
   el.start.classList.remove('hidden');
-  state.mode = 'ready';
+  state.mode = 'menu';
+  applyModeUI();
   clock.getDelta();
   animate();
 }
@@ -511,14 +580,17 @@ function animate() {
     readInput();
     vehicle.update(dt, input);
     state.elapsed += dt;
+    state.distance += Math.abs(vehicle.speed) * dt;
 
-    const hit = track.check(pos3(vehicle.pos));
-    if (hit) {
-      el.cpVal.textContent = hit.checkpoint.index + 1 + ' / ' + CHECKPOINT_COUNT;
-      if (hit.finished) {
-        finishRun();
-      } else {
-        toast('CHECKPOINT ' + (hit.checkpoint.index + 1) + ' TERLEWATI', true);
+    if (state.gameMode === 'timer') {
+      const hit = track.check(pos3(vehicle.pos));
+      if (hit) {
+        el.cpVal.textContent = hit.checkpoint.index + 1 + ' / ' + CHECKPOINT_COUNT;
+        if (hit.finished) {
+          finishRun();
+        } else {
+          toast('CHECKPOINT ' + (hit.checkpoint.index + 1) + ' TERLEWATI', true);
+        }
       }
     }
 
@@ -537,7 +609,7 @@ function animate() {
     }
 
     if (vehicle.impact > 0.05) camRig.addShake(vehicle.impact * 0.55);
-  } else if (state.mode === 'paused' || state.mode === 'finished') {
+  } else if (state.mode === 'paused' || state.mode === 'finished' || state.mode === 'menu') {
     vehicle.update(dt, { forward: false, back: false, left: false, right: false, handbrake: true });
   }
 
@@ -571,6 +643,9 @@ function animate() {
     el.driveChip.classList.toggle('warn', !vehicle.grounded);
     el.airChip.classList.toggle('on', !vehicle.grounded);
     el.timeVal.textContent = fmtTime(state.elapsed);
+    if (state.gameMode === 'freeroam') {
+      el.distVal.textContent = fmtDist(state.distance);
+    }
     drawMinimap();
   }
 
@@ -595,6 +670,6 @@ function pos3(v) {
 window.__game = {
   THREE, renderer, scene, camera, terrain, track, scenery, dust, vehicle, camRig, audio,
   state, input, keys,
-  start: startGame, pause: pauseGame, resume: resumeGame, restart: restartGame,
-  respawn: respawnAtCheckpoint,
+  start: startMode, startMode, pause: pauseGame, resume: resumeGame,
+  restart: restartGame, menu: backToMenu, respawn,
 };
