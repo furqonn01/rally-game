@@ -231,6 +231,14 @@ export class Vehicle {
     this.wheelBump = [0, 0, 0, 0];   // guncangan vertikal per roda
     this.wheelWobble = [0, 0, 0, 0]; // goyangan samping per roda
 
+    // ---- data kontak roda (input jalan untuk kamera) ----
+    // Ini yang membuat getaran kamera berkorelasi dengan medan: tinggi medan
+    // di bawah tiap roda, dan turunannya terhadap waktu.
+    this.wheelHeight = [0, 0, 0, 0]; // tinggi medan absolut di bawah tiap roda (m)
+    this.wheelVel = [0, 0, 0, 0];    // kecepatan vertikal medan di bawah roda (m/s)
+    this.groundY = 0;                // rata-rata tinggi medan di 4 roda
+    this.groundVel = 0;              // kecepatan vertikal rata-rata medan (m/s)
+
     this.quat = new THREE.Quaternion();
     this.targetQuat = new THREE.Quaternion();
 
@@ -413,7 +421,10 @@ export class Vehicle {
     for (let k = 0; k < 4; k++) {
       this.wheelBump[k] = 0;
       this.wheelWobble[k] = 0;
+      this.wheelVel[k] = 0;
+      this.wheelHeight[k] = terrainHeight(this.pos.x, this.pos.z);
     }
+    this.groundVel = 0;
 
     const n = terrainNormal(this.pos.x, this.pos.z, this._n);
     this.quat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
@@ -548,6 +559,25 @@ export class Vehicle {
 
     const hFL = heights[0], hFR = heights[1], hRL = heights[2], hRR = heights[3];
     const groundY = (hFL + hFR + hRL + hRR) * 0.25;
+
+    // ---------- input jalan untuk kamera ----------
+    // Defleksi tiap roda terhadap rata-rata 4 roda, plus turunannya. Ini yang
+    // dipakai kamera untuk menghasilkan getaran yang benar-benar mengikuti
+    // bentuk medan (bukan sinus waktu absolut).
+    this.groundY = groundY;
+    const dtSafe = Math.max(dt, 1e-4);
+    const velSmooth = 1 - Math.exp(-30 * dt);
+    let velSum = 0;
+    for (let k = 0; k < 4; k++) {
+      const vel = (heights[k] - this.wheelHeight[k]) / dtSafe;
+      this.wheelHeight[k] = heights[k];
+      // dibatasi: lompatan posisi (respawn / tepi medan tajam) bisa
+      // menghasilkan turunan ratusan m/s yang tidak masuk akal
+      const velClamped = vel > 12 ? 12 : vel < -12 ? -12 : vel;
+      this.wheelVel[k] += (velClamped - this.wheelVel[k]) * velSmooth;
+      velSum += this.wheelVel[k];
+    }
+    this.groundVel += (velSum * 0.25 - this.groundVel) * velSmooth;
 
     // ---------- vertikal / lompat ----------
     const prevGrounded = this.grounded;
