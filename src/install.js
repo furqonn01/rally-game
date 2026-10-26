@@ -4,6 +4,13 @@
 // Chrome/Edge/Android memicu event sebelum-pasang (beforeinstallprompt) yang
 // bisa kita tahan dan tampilkan sebagai tombol. Safari/iOS tidak mendukung
 // event itu, jadi di sana kita hanya menampilkan petunjuk manual.
+//
+// Penting: pemasangan offline HANYA berguna di origin aman (HTTPS/localhost).
+// Di origin tidak aman (mis. http://192.168.1.10:4173) service worker tidak
+// bisa didaftarkan, jadi tidak ada satu byte pun yang disimpan ke cache.
+// Kalau kita tetap menawarkan tombol pasang di sana, hasilnya adalah ikon di
+// layar utama yang membuka halaman kosong begitu server dimatikan. Karena itu
+// di origin tidak aman tombolnya disembunyikan dan kita tampilkan penjelasan.
 // ---------------------------------------------------------------------------
 
 function isStandalone() {
@@ -23,24 +30,65 @@ function isIOS() {
   return /iPhone|iPod/.test(ua) || ipad;
 }
 
+// Origin aman = syarat mutlak service worker (dan jadi syarat pasang offline).
+export function isSecureOrigin() {
+  if (typeof location === 'undefined') return true;
+  const { protocol, hostname } = location;
+  if (protocol === 'https:' || protocol === 'chrome-extension:') return true;
+  const local = ['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0'];
+  return local.indexOf(hostname) !== -1;
+}
+
 export function setupInstall({ button, hint }) {
   if (typeof window === 'undefined') return { refresh() {} };
 
-  // Build satu file / game yang sudah terpasang tidak perlu tombol pasang.
-  if (__BJ40_SINGLE_FILE__ || isStandalone()) {
+  // Petunjuk punya beberapa varian; markup di index.html menandainya dengan
+  // [data-hint]. Hanya satu yang ditampilkan pada satu waktu.
+  const parts = hint ? Array.prototype.slice.call(hint.querySelectorAll('[data-hint]')) : [];
+
+  const setHint = (kind) => {
+    if (!hint) return;
+    hint.hidden = !kind;
+    if (kind === 'insecure') hint.setAttribute('data-warn', '');
+    else hint.removeAttribute('data-warn');
+    for (const part of parts) {
+      if (part.dataset.hint === kind) part.removeAttribute('hidden');
+      else part.setAttribute('hidden', '');
+    }
+  };
+
+  const hideAll = () => {
     if (button) button.hidden = true;
     if (hint) hint.hidden = true;
+  };
+
+  // Build satu file / game yang sudah terpasang tidak perlu tombol pasang.
+  if (__BJ40_SINGLE_FILE__ || isStandalone()) {
+    hideAll();
     return { refresh() {} };
+  }
+
+  // Origin tidak aman: pasang offline mustahil. Jangan berbohong ke pemain.
+  if (!isSecureOrigin()) {
+    if (button) button.hidden = true;
+    setHint('insecure');
+    const originEl = document.getElementById('installOrigin');
+    if (originEl) originEl.textContent = location.host || location.origin;
+    return {
+      refresh() {
+        if (button) button.hidden = true;
+        setHint('insecure');
+      },
+    };
   }
 
   let deferred = null;
   let canPrompt = false;
 
   const show = () => {
-    if (!button && !hint) return;
-    if (button && canPrompt) button.hidden = false;
+    if (button) button.hidden = !canPrompt;
     // Petunjuk manual hanya untuk iOS (tidak punya beforeinstallprompt).
-    if (hint) hint.hidden = !(isIOS() && !canPrompt);
+    setHint(isIOS() && !canPrompt ? 'ios' : '');
   };
 
   window.addEventListener('beforeinstallprompt', (event) => {
@@ -53,8 +101,7 @@ export function setupInstall({ button, hint }) {
   window.addEventListener('appinstalled', () => {
     deferred = null;
     canPrompt = false;
-    if (button) button.hidden = true;
-    if (hint) hint.hidden = true;
+    hideAll();
   });
 
   if (button) {
@@ -64,7 +111,7 @@ export function setupInstall({ button, hint }) {
       try {
         deferred.prompt();
         const choice = await deferred.userChoice;
-        if (choice && choice.outcome === 'accepted' && hint) hint.hidden = true;
+        if (choice && choice.outcome === 'accepted') hideAll();
       } catch (err) {
         console.warn('[install] gagal menampilkan dialog pasang:', err);
       } finally {
@@ -80,8 +127,7 @@ export function setupInstall({ button, hint }) {
     // Dipanggil tiap kali menu utama dibuka agar status tombol ikut segar.
     refresh() {
       if (isStandalone()) {
-        if (button) button.hidden = true;
-        if (hint) hint.hidden = true;
+        hideAll();
         return;
       }
       show();

@@ -1,0 +1,54 @@
+name: Deploy ke GitHub Pages
+
+# Game ini hanya bisa dipasang untuk mode offline lewat HTTPS (atau localhost),
+# karena service worker — yang menyimpan seluruh game ke perangkat — dilarang
+# browser di origin tidak aman seperti http://192.168.x.x.
+# Workflow ini menerbitkan build PWA ke GitHub Pages supaya bisa dipasang di HP.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Biarkan satu deploy berjalan; jangan batalkan yang sedang menulis ke Pages.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Pasang dependensi
+        run: npm ci
+
+      - name: Build PWA
+        run: npm run build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

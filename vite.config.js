@@ -110,12 +110,8 @@ export default defineConfig(({ mode }) => {
           registerType: 'autoUpdate',
           injectRegister: null, // registrasi manual di src/pwa.js
           manifest: false, // memakai public/manifest.webmanifest
-          includeAssets: [
-            'icons/icon-192.png',
-            'icons/icon-512.png',
-            'icons/icon-maskable-512.png',
-            'icons/apple-touch-icon.png',
-          ],
+          // Ikon sudah tercakup globPatterns di bawah; mendaftarkannya lagi lewat
+          // includeAssets hanya menghasilkan entri precache duplikat.
           workbox: {
             globPatterns: ['**/*.{js,css,html,glb,png,svg,webmanifest}'],
             // Model mobil ~1.9 MB; batas default Workbox 2 MiB terlalu mepet.

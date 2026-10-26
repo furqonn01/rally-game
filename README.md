@@ -33,6 +33,32 @@ Game ini adalah **Progressive Web App (PWA)**: seluruh isi game — termasuk mod
 
 > Service worker hanya aktif pada `https://` atau `localhost`. Kalau butuh main langsung dari `file://` tanpa server sama sekali, gunakan **build satu file** (lihat bagian di bawah).
 
+### ⚠️ Kenapa harus HTTPS (atau localhost)?
+
+Ini penyebab paling umum dari keluhan *"di browser jalan, tapi setelah dipasang aplikasinya tidak bisa dibuka"*.
+
+Browser hanya mengizinkan **service worker** dan **Cache Storage** pada **secure context**, yaitu `https://` atau `localhost`. Alamat IP lokal seperti `http://192.168.1.10:4173` **bukan** secure context, sehingga:
+
+- service worker gagal didaftarkan → tidak ada satu pun file yang di-cache;
+- ikon di layar utama tetap terbentuk, tetapi isinya kosong — dibuka hasilnya layar putih / tidak jalan;
+- halaman masih tampil normal kalau dibuka sebagai tab biasa (karena file diambil langsung dari server), jadi masalahnya sulit terlihat.
+
+Karena itu game mendeteksi kondisi ini dan **menyembunyikan tombol PASANG**, lalu menampilkan peringatan kuning berisi alamat IP yang dipakai. Supaya benar-benar bisa dipasang & offline di HP, sajikan lewat HTTPS:
+
+- **paling mudah:** deploy ke GitHub Pages / Netlify / Vercel / Cloudflare Pages (semua otomatis HTTPS), atau
+- `ngrok http 4173` / `cloudflared tunnel --url http://localhost:4173` untuk tunnel HTTPS ke server lokal, atau
+- **build satu file** (`npm run build:offline`) yang tidak butuh service worker sama sekali.
+
+> Bermain dari alamat IP lokal tetap bisa selama server-nya hidup — hanya **instalasi offline**-nya yang tidak akan bekerja.
+
+### Deploy ke GitHub Pages
+
+Workflow `.github/workflows/deploy.yml` sudah disiapkan: setiap `push` ke `main` akan build lalu publikasikan `dist/` ke GitHub Pages (HTTPS otomatis).
+
+1. Repo → **Settings** → **Pages** → **Build and deployment** → *Source*: **GitHub Actions**.
+2. Push ke `main` (atau jalankan workflow **Deploy to GitHub Pages** secara manual dari tab *Actions*).
+3. Buka `https://<username>.github.io/<repo>/` — di sinilah tombol **PASANG GAME INI** berfungsi dan game bisa dimainkan offline setelah sekali dibuka.
+
 ### Android / Chrome / Edge
 
 1. Buka game lewat HTTPS (atau `http://localhost:4173` saat preview).
@@ -207,6 +233,8 @@ python tools/make-icons.py
 - `vite-plugin-pwa` menghasilkan `dist/sw.js` yang mem-*precache* HTML, JS, ikon, dan **model GLB** (batas ukuran cache dinaikkan ke 8 MB karena model ± 1,9 MB).
 - `virtual:vehicle-url` adalah modul virtual di `vite.config.js`. Pada build biasa ia mengembalikan URL relatif (`./models/BAIC+BJ40.glb`), sedangkan pada `build:offline` ia mengembalikan **data URL base64** sehingga model ikut tertanam di HTML.
 - `base: './'` membuat semua path relatif, jadi build bisa ditaruh di sub-folder (GitHub Pages, itch.io, dsb.) tanpa konfigurasi tambahan.
+- `src/pwa.js` dan `src/install.js` memeriksa `isSecureContext` lebih dulu. Di origin tidak aman (mis. `http://192.168.x.x`) pendaftaran service worker dilewati dengan `console.warn` yang jelas, dan tombol **PASANG GAME INI** disembunyikan agar tidak menawarkan instalasi yang pasti gagal.
+- `vite-plugin-pwa` hanya mem-*precache* 8 entri; ikon tidak didaftarkan dua kali (`includeAssets` sengaja tidak dipakai karena `globPatterns` sudah mencakup `png`).
 
 ---
 

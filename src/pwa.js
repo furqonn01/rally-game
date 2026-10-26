@@ -5,16 +5,31 @@
 // dipakai saat game dibuka langsung dari file:// — jadi registrasinya dijaga.
 // ---------------------------------------------------------------------------
 
+import { isSecureOrigin } from './install.js';
+
 export function registerServiceWorker(onUpdate) {
   if (typeof window === 'undefined') return;
   // Build satu file (dist-offline) tidak menyertakan service worker.
   if (__BJ40_SINGLE_FILE__) return;
-  if (!('serviceWorker' in navigator)) return;
   if (!import.meta.env.PROD) return;
 
-  const { protocol, hostname } = window.location;
-  const secure = protocol === 'https:' || hostname === 'localhost' || hostname === '127.0.0.1';
-  if (!secure) return;
+  // Origin tidak aman (mis. http://192.168.1.10:4173): browser melarang service
+  // worker, jadi tidak ada yang bisa disimpan untuk mode offline. Jangan diam
+  // saja — beri tahu pengembang dan pemain supaya tidak bingung kenapa hasil
+  // pasangnya kosong.
+  if (!isSecureOrigin()) {
+    console.warn(
+      '[pwa] Origin tidak aman (' + window.location.origin + '). Service worker tidak bisa ' +
+        'didaftarkan sehingga game TIDAK bisa dipasang/dimainkan offline. ' +
+        'Gunakan HTTPS atau localhost.'
+    );
+    return;
+  }
+
+  if (!('serviceWorker' in navigator)) {
+    console.warn('[pwa] Browser ini tidak mendukung service worker; mode offline tidak aktif.');
+    return;
+  }
 
   const swUrl = new URL('sw.js', document.baseURI).href;
 
