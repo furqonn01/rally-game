@@ -7,6 +7,10 @@ import { CameraRig } from './cameras.js';
 import { Track, CHECKPOINT_COUNT } from './track.js';
 import { Scenery, Dust } from './scenery.js';
 import { VehicleAudio } from './audio.js';
+import { initTouch } from './touch.js';
+import VEHICLE_URL from 'virtual:vehicle-url';
+import { registerServiceWorker } from './pwa.js';
+import { setupInstall } from './install.js';
 
 // ---------------------------------------------------------------------------
 // Renderer
@@ -136,6 +140,8 @@ const el = {
   pause: document.getElementById('pause'),
   finish: document.getElementById('finish'),
   finishSub: document.getElementById('finishSub'),
+  installBtn: document.getElementById('installBtn'),
+  installHint: document.getElementById('installHint'),
 };
 
 const BEST_KEY = 'bj40-offroad-best-v1';
@@ -295,6 +301,14 @@ function readInput() {
   input.handbrake = !!keys['Space'];
 }
 
+/** Kelas `playing` di <html> menentukan tampil/tidaknya kontrol sentuh. */
+function syncPlayingClass() {
+  document.documentElement.classList.toggle('playing', state.mode === 'playing');
+}
+
+/** Diisi oleh initTouch() bila kontrol sentuh tersedia. */
+let touch = null;
+
 window.addEventListener('keydown', (e) => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
 
@@ -330,29 +344,72 @@ window.addEventListener('keyup', (e) => {
   readInput();
 });
 
-// ---- mouse look ----
-let dragging = false;
+// ---- mouse / sentuh: putar kamera ----
+// Satu jari (atau klik-geser mouse) memutar kamera mengelilingi mobil.
+// `movementX/Y` tidak diandalkan karena nilainya 0 pada banyak browser mobile,
+// jadi posisi jari sebelumnya dicatat sendiri per pointerId.
+let lookId = null;
+let lookX = 0;
+let lookY = 0;
+
 renderer.domElement.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0) return;
-  dragging = true;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  // Jari kedua dst. diabaikan agar kemudi/pedal tidak mengganggu pandangan.
+  if (lookId !== null) return;
+  lookId = e.pointerId;
+  lookX = e.clientX;
+  lookY = e.clientY;
   camRig.beginDrag();
-  renderer.domElement.setPointerCapture(e.pointerId);
+  try { renderer.domElement.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
 });
+
 renderer.domElement.addEventListener('pointermove', (e) => {
-  if (!dragging) return;
-  camRig.drag(e.movementX || 0, e.movementY || 0);
+  if (e.pointerId !== lookId) return;
+  const dx = e.clientX - lookX;
+  const dy = e.clientY - lookY;
+  lookX = e.clientX;
+  lookY = e.clientY;
+  camRig.drag(dx, dy);
 });
-const endDrag = (e) => {
-  if (!dragging) return;
-  dragging = false;
+
+const endLook = (e) => {
+  if (e.pointerId !== lookId) return;
+  lookId = null;
   camRig.endDrag();
   try { renderer.domElement.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
 };
-renderer.domElement.addEventListener('pointerup', endDrag);
-renderer.domElement.addEventListener('pointercancel', endDrag);
+renderer.domElement.addEventListener('pointerup', endLook);
+renderer.domElement.addEventListener('pointercancel', endLook);
+renderer.domElement.addEventListener('lostpointercapture', endLook);
 
 renderer.domElement.addEventListener('wheel', (e) => {
   camRig.orbitDist = THREE.MathUtils.clamp(camRig.orbitDist + Math.sign(e.deltaY) * 0.9, 4.5, 26);
+}, { passive: true });
+
+// Cubit dua jari (pinch) untuk menjauhkan / mendekatkan kamera.
+let pinchStart = 0;
+let pinchDist0 = 0;
+const pinchDisp = (e) => Math.hypot(
+  e.touches[0].clientX - e.touches[1].clientX,
+  e.touches[0].clientY - e.touches[1].clientY
+);
+renderer.domElement.addEventListener('touchstart', (e) => {
+  if (e.touches.length !== 2) return;
+  // mode pinch: hentikan putar kamera agar tidak berebut
+  if (lookId !== null) {
+    lookId = null;
+    camRig.endDrag();
+  }
+  pinchStart = pinchDisp(e);
+  pinchDist0 = camRig.orbitDist;
+}, { passive: true });
+renderer.domElement.addEventListener('touchmove', (e) => {
+  if (e.touches.length !== 2 || !pinchStart) return;
+  const ratio = pinchDisp(e) / Math.max(1, pinchStart);
+  camRig.orbitDist = THREE.MathUtils.clamp(pinchDist0 / ratio, 4.5, 26);
+}, { passive: true });
+renderer.domElement.addEventListener('touchend', (e) => {
+  if (e.touches.length < 2) pinchStart = 0;
 }, { passive: true });
 
 // ---------------------------------------------------------------------------
@@ -404,6 +461,7 @@ function startMode(mode) {
   state.elapsed = 0;
   state.distance = 0;
   state.mode = 'playing';
+  syncPlayingClass();
 
   el.cpVal.textContent = '0 / ' + CHECKPOINT_COUNT;
   el.distVal.textContent = fmtDist(0);
@@ -425,6 +483,7 @@ function startMode(mode) {
 
 function backToMenu() {
   state.mode = 'menu';
+  syncPlayingClass();
   audio.setPaused(true);
   el.pause.classList.add('hidden');
   el.finish.classList.add('hidden');
@@ -432,18 +491,24 @@ function backToMenu() {
   el.start.classList.remove('hidden');
   for (const k in keys) keys[k] = false;
   readInput();
+  if (touch) touch.clear();
+  install.refresh();
+  applyPendingUpdate();
 }
 
 function pauseGame() {
   if (state.mode !== 'playing') return;
   state.mode = 'paused';
+  syncPlayingClass();
   audio.setPaused(true);
   el.pause.classList.remove('hidden');
+  if (touch) touch.clear();
 }
 
 function resumeGame() {
   if (state.mode !== 'paused') return;
   state.mode = 'playing';
+  syncPlayingClass();
   audio.setPaused(false);
   el.pause.classList.add('hidden');
   clock.getDelta();
@@ -473,6 +538,7 @@ function respawn() {
 
 function finishRun() {
   state.mode = 'finished';
+  syncPlayingClass();
   audio.setPaused(true);
   const t = state.elapsed;
 
@@ -499,11 +565,50 @@ document.getElementById('againBtn').addEventListener('click', () => startMode('t
 document.getElementById('finishFreeBtn').addEventListener('click', () => startMode('freeroam'));
 document.getElementById('finishMenuBtn').addEventListener('click', backToMenu);
 
+// ---------------------------------------------------------------------------
+// Kontrol sentuh (HP / tablet)
+// ---------------------------------------------------------------------------
+touch = initTouch({
+  keys,
+  readInput,
+  camRig,
+  audio,
+  state,
+  el,
+  toast,
+  respawn,
+  pauseGame,
+  resumeGame,
+});
+
 window.addEventListener('blur', () => {
   for (const k in keys) keys[k] = false;
   readInput();
+  if (touch) touch.clear();
   if (state.mode === 'playing') pauseGame();
 });
+
+// ---------------------------------------------------------------------------
+// PWA — bisa dipasang & dimainkan offline
+// ---------------------------------------------------------------------------
+let pendingUpdate = null;
+
+function applyPendingUpdate() {
+  if (!pendingUpdate) return;
+  const run = pendingUpdate;
+  pendingUpdate = null;
+  run();
+}
+
+registerServiceWorker((applyUpdate) => {
+  toast('VERSI BARU TERSEDIA — SIMPAN & MUAT ULANG', true);
+  // Jangan muat ulang di tengah balapan: tunda sampai pemain keluar ke menu.
+  if (state.mode === 'playing') pendingUpdate = applyUpdate;
+  else applyUpdate();
+});
+
+// Tombol "PASANG GAME INI" di menu utama (Chrome/Edge/Android).
+const install = setupInstall({ button: el.installBtn, hint: el.installHint });
 
 // ---------------------------------------------------------------------------
 // Ukuran layar
@@ -524,7 +629,7 @@ async function boot() {
   el.loadBar.style.width = '4%';
   el.loadText.textContent = 'MEMUAT MODEL BAIC BJ40 — 0%';
 
-  await vehicle.load('/models/BAIC+BJ40.glb', (p) => {
+  await vehicle.load(VEHICLE_URL, (p) => {
     const pct = Math.round(p * 100);
     el.loadBar.style.width = Math.max(4, pct) + '%';
     el.loadText.textContent = 'MEMUAT MODEL BAIC BJ40 — ' + pct + '%';
@@ -552,6 +657,7 @@ async function boot() {
   el.start.classList.remove('hidden');
   state.mode = 'menu';
   applyModeUI();
+  install.refresh();
   clock.getDelta();
   animate();
 }

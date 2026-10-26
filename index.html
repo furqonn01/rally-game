@@ -2,16 +2,39 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0d12" />
+<meta name="description" content="Game offroad 3D BAIC BJ40 — bisa dimainkan offline dan dipasang di HP." />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="BJ40 Offroad" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
 <title>BAIC BJ40 — Petualangan Offroad</title>
+<script>
+  // Tandai perangkat sentuh sedini mungkin supaya tata letak HUD mobile
+  // tidak berkedip saat halaman pertama kali dilukis.
+  try {
+    if (window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0) {
+      document.documentElement.classList.add('touch');
+    }
+  } catch (e) { /* diabaikan */ }
+</script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
     width: 100%; height: 100%; overflow: hidden; background: #0a0d12;
     font-family: "Segoe UI", "Inter", system-ui, -apple-system, sans-serif;
     color: #f2f4f7; -webkit-user-select: none; user-select: none;
+    overscroll-behavior: none; -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
   }
-  canvas { display: block; width: 100%; height: 100%; }
+  canvas {
+    display: block; width: 100%; height: 100%;
+    touch-action: none; /* jangan sampai gestur browser merebut drag kamera */
+  }
 
   #hud {
     position: fixed; inset: 0; pointer-events: none; z-index: 10;
@@ -180,6 +203,21 @@
     padding: 3px 8px; color: #eef3f9; min-width: 26px; text-align: center; flex: none;
   }
 
+  /* ---------- pasang offline ---------- */
+  #installBtn { padding: 12px 34px; font-size: 11.5px; letter-spacing: 2.4px; margin-top: 2px; }
+  #installBtn[hidden], #installHint[hidden] { display: none; }
+  .installhint {
+    max-width: 620px; font-size: 11.5px; line-height: 1.7; color: #8fa1b6;
+    background: rgba(126,220,255,.06); border: 1px solid rgba(126,220,255,.18);
+    border-radius: 11px; padding: 11px 15px; text-align: left;
+  }
+  .installhint b { color: #bfe8ff; font-weight: 700; }
+  .installhint button {
+    pointer-events: auto; cursor: pointer; margin-left: 8px; font-family: inherit;
+    font-size: 10px; font-weight: 900; letter-spacing: 1.6px; color: #0a1a22;
+    background: #7fdcff; border: 0; border-radius: 6px; padding: 5px 10px;
+  }
+
   /* ---------- loading ---------- */
   #loading { z-index: 50; }
   #loadBarWrap { width: min(420px, 74vw); height: 6px; border-radius: 4px; background: rgba(255,255,255,.1); overflow: hidden; }
@@ -205,6 +243,145 @@
     #speedVal { font-size: 40px; }
     #stats { min-width: 150px; }
   }
+
+  /* =======================================================================
+     KONTROL SENTUH (perangkat mobile)
+     Dirancang untuk ibu jari: kemudi di kiri, pedal di kanan, tombol
+     utilitas di kolom kiri, panel HUD dipadatkan ke sudut atas.
+     ======================================================================= */
+  #touch { display: none; position: absolute; inset: 0; z-index: 12; }
+  /* Hanya tampil saat benar-benar mengemudi: menu/jeda/selesai memakai overlay. */
+  html.touch.playing #hud.visible #touch { display: block; }
+
+  #touch .tgroup { position: absolute; display: flex; gap: clamp(8px, 1.6vmin, 14px); align-items: flex-end; }
+  #touch .tgroup.tsteer {
+    left: calc(14px + env(safe-area-inset-left));
+    bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+  #touch .tgroup.tpedal {
+    right: calc(14px + env(safe-area-inset-right));
+    bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+  #touch .tgroup.tutil {
+    left: calc(14px + env(safe-area-inset-left));
+    top: 50%; transform: translateY(-50%);
+    flex-direction: column; align-items: stretch;
+  }
+
+  #touch button {
+    pointer-events: auto; touch-action: none; cursor: pointer;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+    font-family: inherit; color: #eaf0f7;
+    border: 1px solid rgba(255,255,255,.18);
+    background: linear-gradient(160deg, rgba(22,30,42,.78), rgba(10,14,20,.66));
+    backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px);
+    box-shadow: 0 8px 22px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.08);
+    transition: transform .08s ease, background .12s ease, border-color .12s ease, color .12s ease;
+  }
+  #touch button.down {
+    transform: scale(.94);
+    border-color: rgba(255,179,71,.8);
+    background: linear-gradient(160deg, rgba(255,176,70,.9), rgba(255,110,20,.82));
+    color: #1a0e02;
+  }
+  #touch .pad { display: grid; place-items: center; }
+  #touch .steer, #touch .pedal {
+    width: clamp(64px, 13.5vmin, 108px);
+    height: clamp(64px, 13.5vmin, 108px);
+    border-radius: clamp(16px, 3vmin, 24px);
+  }
+  #touch .steer { font-size: clamp(20px, 4.2vmin, 32px); font-weight: 900; }
+  #touch .pedal { font-size: clamp(10px, 1.9vmin, 13px); font-weight: 900; letter-spacing: 2px; }
+  #touch .pedal.gas { border-color: rgba(110,231,168,.32); }
+  #touch .pedal.gas.down { border-color: rgba(110,231,168,.9);
+    background: linear-gradient(160deg, rgba(110,231,168,.92), rgba(45,190,130,.85)); }
+  #touch .pedal.brake { border-color: rgba(255,140,120,.26); }
+  #touch .pedal.brake.down { border-color: rgba(255,120,90,.9);
+    background: linear-gradient(160deg, rgba(255,140,110,.92), rgba(220,70,50,.85)); }
+
+  #touch .hand {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    padding: 14px clamp(14px, 3vmin, 26px); border-radius: 16px;
+    font-size: clamp(9px, 1.7vmin, 11px); font-weight: 900; letter-spacing: 2px;
+    white-space: nowrap;
+  }
+  #touch .hand.down { transform: translateX(-50%) scale(.94); }
+
+  #touch .tutil button {
+    width: auto; padding: 9px clamp(8px, 1.8vmin, 13px); border-radius: 11px;
+    font-size: clamp(8px, 1.5vmin, 10px); font-weight: 800; letter-spacing: 1.4px;
+    text-align: center;
+  }
+
+  /* HUD versi sentuh: padat, tidak menutupi jempol */
+  html.touch #brand { display: none; }
+  html.touch #hint { display: none; }
+  html.touch #fps { display: none; }
+  html.touch #camMode { display: none; }
+  html.touch #stats {
+    top: calc(10px + env(safe-area-inset-top)); left: calc(10px + env(safe-area-inset-left));
+    right: auto; padding: 8px 12px; min-width: 0; border-radius: 11px;
+  }
+  html.touch #stats .lbl { font-size: 8px; letter-spacing: 1.2px; }
+  html.touch #stats .val { font-size: 15px; }
+  html.touch #stats .row + .row { margin-top: 5px; padding-top: 5px; }
+  html.touch #speedo {
+    top: calc(10px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+    bottom: auto; padding: 8px 16px 9px; min-width: 116px; border-radius: 11px;
+    text-align: center;
+  }
+  html.touch #speedo .top { justify-content: center; gap: 5px; }
+  html.touch #speedVal { font-size: clamp(26px, 5vmin, 40px); }
+  html.touch #speedUnit { font-size: 8px; letter-spacing: 1.4px; padding-bottom: 3px; }
+  html.touch #speedBarWrap { margin-top: 6px; height: 4px; }
+  html.touch #gearRow { margin-top: 6px; gap: 4px; justify-content: center; }
+  html.touch #gearRow .chip { font-size: 8px; padding: 2.5px 6px; letter-spacing: 1px; }
+  html.touch #mapWrap {
+    top: calc(10px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right));
+    bottom: auto; padding: 6px; border-radius: 11px;
+  }
+  html.touch #minimap { width: clamp(76px, 16vmin, 116px); height: clamp(76px, 16vmin, 116px); }
+  html.touch #mapWrap .cap { display: none; }
+  html.touch #toast {
+    top: 42%; font-size: clamp(11px, 2.2vmin, 14px); padding: 10px 20px;
+    max-width: 78vw; white-space: normal; text-align: center; border-radius: 10px;
+  }
+
+  /* HP dalam posisi tegak: semua panel lebih rapat agar tetap terbaca */
+  @media (orientation: portrait) {
+    html.touch #speedo { top: calc(58px + env(safe-area-inset-top)); }
+    html.touch #toast { top: 38%; }
+  }
+  @media (max-height: 420px) {
+    html.touch #stats .row:nth-child(n+4) { display: none; }
+  }
+
+  /* Overlay (menu/jeda/selesai) harus bisa digulir di layar pendek */
+  .overlay { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  @media (max-height: 560px) {
+    .overlay { gap: 14px; padding: 16px; justify-content: flex-start; padding-top: 22px; }
+    .hero-title { font-size: clamp(22px, 4.6vw, 34px); }
+    .hero-sub { display: none; }
+  }
+  @media (max-height: 480px) {
+    .overlay { gap: 10px; }
+    .touchgrid { gap: 5px 16px; margin-top: 0; }
+    .touchgrid .item { font-size: 11px; }
+    .touchgrid .item b { font-size: 10px; padding: 3px 7px; min-width: 26px; }
+    #installBtn { padding: 10px 26px; }
+  }
+  .touchgrid { display: none; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); gap: 10px 22px;
+    width: 100%; max-width: 820px; margin-top: 4px; }
+  .touchgrid .item { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #a9bacd; }
+  .touchgrid .item b {
+    display: inline-block; min-width: 30px; padding: 4px 9px; text-align: center;
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 11px;
+    color: #ffe6c9; background: rgba(255, 150, 60, .12);
+    border: 1px solid rgba(255, 150, 60, .38); border-radius: 7px;
+  }
+  html.touch .keygrid { display: none; }
+  html.touch .touchgrid { display: grid; }
 </style>
 </head>
 <body>
@@ -262,6 +439,27 @@
 
   <div id="toast"></div>
   <div id="fps"></div>
+
+  <div id="touch" aria-hidden="true">
+    <div class="tgroup tutil">
+      <button class="tbtn" id="tcCam" type="button">KAMERA</button>
+      <button class="tbtn" id="tcMute" type="button">SUARA</button>
+      <button class="tbtn" id="tcReset" type="button">RESET</button>
+      <button class="tbtn" id="tcPause" type="button">JEDA</button>
+    </div>
+
+    <div class="tgroup tsteer">
+      <button class="pad steer" id="tcLeft" type="button" aria-label="Belok kiri">&#9664;</button>
+      <button class="pad steer" id="tcRight" type="button" aria-label="Belok kanan">&#9654;</button>
+    </div>
+
+    <div class="tgroup tpedal">
+      <button class="pad pedal brake" id="tcBrake" type="button">REM</button>
+      <button class="pad pedal gas" id="tcGas" type="button">GAS</button>
+    </div>
+
+    <button class="hand" id="tcHand" type="button">REM TANGAN</button>
+  </div>
 </div>
 
 <div id="loading" class="overlay">
@@ -313,6 +511,26 @@
     <div class="item"><kbd>P</kbd> Jeda / lanjut</div>
     <div class="item"><kbd>Esc</kbd> Kembali ke menu mode</div>
     <div class="item"><kbd>Mouse</kbd> Lihat sekeliling</div>
+  </div>
+
+  <div class="touchgrid">
+    <div class="item"><b>GAS</b> Tahan untuk menambah gas</div>
+    <div class="item"><b>REM</b> Tahan untuk mengerem / mundur</div>
+    <div class="item"><b>&#9664; &#9654;</b> Tahan untuk belok</div>
+    <div class="item"><b>REM TANGAN</b> Handbrake</div>
+    <div class="item"><b>KAMERA</b> Ganti mode kamera</div>
+    <div class="item"><b>SUARA</b> Suara hidup / mati</div>
+    <div class="item"><b>RESET</b> Reset kendaraan</div>
+    <div class="item"><b>JEDA</b> Jeda / lanjut</div>
+    <div class="item"><b>1 JARI</b> Geser untuk memutar kamera</div>
+    <div class="item"><b>2 JARI</b> Cubit untuk zoom kamera</div>
+  </div>
+
+  <button class="btn" id="installBtn" hidden>PASANG GAME INI</button>
+  <div class="installhint" id="installHint" hidden>
+    Ingin main tanpa internet? Pasang game ini ke layar utama lewat menu browser:
+    <b>Android: titik tiga → "Tambahkan ke layar utama"</b> ·
+    <b>iPhone/iPad: Bagikan → "Tambahkan ke Layar Utama"</b>
   </div>
 </div>
 

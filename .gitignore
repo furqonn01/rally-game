@@ -5,7 +5,9 @@ node_modules/
 
 # Build output
 dist/
+dist-offline/
 dist-ssr/
+dev-dist/
 *.local
 
 # Logs

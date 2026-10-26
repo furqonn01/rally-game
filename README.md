@@ -21,6 +21,67 @@ Game offroad 3D berbasis browser yang dibangun dengan **Three.js** dan **Vite**.
 - **Suara mesin prosedural** — mesin diesel, kerikil, angin, road hum, dan benturan dibangkitkan lewat Web Audio API (tanpa file audio), dengan **akustik berbeda di dalam kabin vs di luar kabin**.
 - **Getaran roda & kamera** — tiap roda berguncang dan bergoyang mengikuti kekasaran medan, dan kamera ikut bergetar (paling keras di POV pengemudi).
 - **Kontrol keyboard + mouse** — setir, kamera, dan orbit bebas tanpa perlu pointer lock.
+- **Kontrol sentuh untuk HP** — tombol gas/rem/setir/rem tangan di layar, drag satu jari untuk memutar kamera, cubit dua jari untuk zoom, plus getaran haptic saat menekan tombol.
+- **Bisa dipasang & dimainkan offline (PWA)** — pasang ke layar utama HP/desktop lewat tombol **PASANG GAME INI** di menu, lalu mainkan tanpa koneksi internet.
+- **Build satu file** — `npm run build:offline` menghasilkan satu `index.html` mandiri (model 3D ikut tertanam) yang bisa dibuka langsung dari `file://`.
+
+---
+
+## 📱 Memasang & Bermain Offline
+
+Game ini adalah **Progressive Web App (PWA)**: seluruh isi game — termasuk model mobil 3D — disimpan di cache perangkat, sehingga setelah dibuka sekali, game bisa dimainkan tanpa internet.
+
+> Service worker hanya aktif pada `https://` atau `localhost`. Kalau butuh main langsung dari `file://` tanpa server sama sekali, gunakan **build satu file** (lihat bagian di bawah).
+
+### Android / Chrome / Edge
+
+1. Buka game lewat HTTPS (atau `http://localhost:4173` saat preview).
+2. Ketuk tombol **PASANG GAME INI** di menu utama, atau tombol **Install** di address bar / menu ⋮ → **Instal aplikasi** (atau *Tambahkan ke layar utama*).
+3. Ikon **BJ40 Offroad** muncul di layar utama. Buka dari situ — game langsung jalan penuh layar dan tetap bisa dimainkan saat offline.
+
+### iPhone / iPad (Safari)
+
+1. Buka game di Safari.
+2. Ketuk tombol **Bagikan** (kotak dengan panah ke atas).
+3. Pilih **Tambahkan ke Layar Utama**, lalu **Tambahkan**.
+4. Buka ikon **BJ40 Offroad** dari layar utama.
+
+> Di iOS tidak ada tombol pasang otomatis (Safari memang tidak mengizinkannya), jadi menu utama menampilkan petunjuk langkah-langkahnya sebagai gantinya.
+
+### Desktop
+
+Klik tombol **PASANG GAME INI** di menu utama, atau ikon **Install** di sisi kanan address bar Chrome/Edge. Setelah itu game punya jendela sendiri dan bisa dibuka tanpa internet.
+
+### Build satu file (tanpa server / `file://`)
+
+```bash
+npm run build:offline
+```
+
+Menghasilkan **satu file** `dist-offline/index.html` (± 3,5 MB) yang sudah berisi seluruh kode **dan** model mobil dalam bentuk base64. File itu bisa:
+
+- di-*double click* langsung dari File Explorer, atau
+- dikirim ke HP dan dibuka lewat browser — tanpa server, tanpa internet, tanpa instalasi.
+
+> Pada mode ini service worker tidak dipakai (memang tidak bisa di `file://`), jadi tidak ada prompt "Install". Semua fitur game tetap berjalan normal, termasuk kontrol sentuh.
+
+---
+
+## 🕹️ Kontrol di HP
+
+Saat game dibuka di perangkat sentuh, HUD otomatis berganti ke tata letak mobile. Kontrol yang muncul hanya ketika sudah mulai bermain:
+
+| Elemen | Fungsi |
+| --- | --- |
+| **GAS** (kanan bawah) | Tahan untuk menambah gas |
+| **REM** (kanan bawah) | Tahan untuk mengerem / mundur |
+| **◀ ▶** (kiri bawah) | Tahan untuk belok kiri / kanan |
+| **REM TANGAN** (tengah bawah) | Tahan untuk handbrake |
+| **KAMERA / SUARA / RESET / JEDA** (kiri atas) | Sama dengan tombol `C` / `M` / `R` / `P` |
+| **Drag 1 jari di area kosong** | Memutar kamera (orbit) |
+| **Cubit 2 jari** | Zoom kamera bebas |
+
+Tombol bisa ditekan **bersamaan** (multi-touch) — misalnya gas + belok kiri — karena tiap jari dilacak terpisah. Halaman juga mengunci pinch-zoom browser dan *pull-to-refresh* supaya gestur tidak mengganggu permainan. Menu mode, layar jeda, dan layar hasil tetap bisa di-scroll bila layar HP pendek.
 
 ---
 
@@ -40,6 +101,8 @@ Game offroad 3D berbasis browser yang dibangun dengan **Three.js** dan **Vite**.
 | `Enter` | Mulai Mode Timer (dari menu/hasil) atau lanjutkan (saat jeda) |
 | `Mouse Drag` | Lihat sekeliling |
 | `Scroll` | Zoom kamera bebas |
+
+Di HP/tablet, kontrol keyboard diganti tombol sentuh — lihat [Kontrol di HP](#-kontrol-di-hp).
 
 ---
 
@@ -87,8 +150,14 @@ Buka `http://localhost:5173` di browser.
 ### Build untuk produksi
 
 ```bash
-npm run build     # output ke folder dist/
-npm run preview   # preview hasil build secara lokal
+npm run build           # build PWA (service worker + manifest) → dist/
+npm run preview         # uji hasil build di http://localhost:4173
+```
+
+Untuk menguji mode offline: buka `http://localhost:4173` sekali, lalu di DevTools → **Application → Service Workers** centang *Offline* (atau matikan Wi-Fi) dan muat ulang halaman. Game harus tetap jalan lengkap dengan model mobil.
+
+```bash
+npm run build:offline   # satu file HTML mandiri → dist-offline/index.html
 ```
 
 > **Catatan:** folder `models/` berisi file GLB berukuran besar (± 35 MB). Jika proses clone terasa lambat, gunakan `git clone --depth 1`.
@@ -100,11 +169,20 @@ npm run preview   # preview hasil build secara lokal
 ```
 FnOffroad/
 ├── index.html          # Markup HUD, overlay (loading / start / pause / finish), dan styling
+├── vite.config.js      # Konfigurasi Vite + PWA + build satu file + penyalinan model
 ├── package.json        # Metadata & dependency proyek
 ├── models/
 │   └── BAIC+BJ40.glb   # Model 3D kendaraan
+├── public/
+│   ├── manifest.webmanifest  # Manifest PWA (nama, ikon, warna, orientasi)
+│   └── icons/                # Ikon aplikasi 192/512/maskable + apple-touch-icon
+├── tools/
+│   └── make-icons.py   # Generator ikon PWA (Python + Pillow)
 └── src/
     ├── main.js         # Entry point: renderer, scene, game loop, HUD, input, alur permainan
+    ├── touch.js        # Bridge kontrol sentuh (multi-touch) ke pipeline input keyboard
+    ├── pwa.js          # Registrasi service worker + notifikasi versi baru
+    ├── install.js      # Tombol "PASANG GAME INI" (beforeinstallprompt) + petunjuk iOS
     ├── terrain.js      # Generator terrain prosedural + helper height/normal/slope
     ├── vehicle.js      # Loader model, fisika kendaraan, roda, suspensi, telemetri
     ├── cameras.js      # CameraRig: mode chase, POV pengemudi, dan orbit bebas
@@ -112,6 +190,23 @@ FnOffroad/
     ├── track.js        # Kurva jalur, penempatan checkpoint, logika progres & respawn
     └── scenery.js      # Pohon, batu, rumput, dan sistem partikel debu
 ```
+
+### Membuat ulang ikon
+
+Ikon PWA dibuat secara prosedural, bukan file desain:
+
+```bash
+python -m pip install pillow
+python tools/make-icons.py
+```
+
+---
+
+## 🔌 Catatan Offline
+
+- `vite-plugin-pwa` menghasilkan `dist/sw.js` yang mem-*precache* HTML, JS, ikon, dan **model GLB** (batas ukuran cache dinaikkan ke 8 MB karena model ± 1,9 MB).
+- `virtual:vehicle-url` adalah modul virtual di `vite.config.js`. Pada build biasa ia mengembalikan URL relatif (`./models/BAIC+BJ40.glb`), sedangkan pada `build:offline` ia mengembalikan **data URL base64** sehingga model ikut tertanam di HTML.
+- `base: './'` membuat semua path relatif, jadi build bisa ditaruh di sub-folder (GitHub Pages, itch.io, dsb.) tanpa konfigurasi tambahan.
 
 ---
 
