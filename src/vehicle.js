@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { terrainHeight, terrainNormal } from './terrain.js';
 import { CabinDisplay } from './cabinDisplay.js';
+import { VehicleMirrors } from './mirrors.js';
 
 // ---------------------------------------------------------------------------
 // Geometri roda (hasil analisis model BAIC BJ40, ruang mesh-lokal)
@@ -220,6 +221,7 @@ export class Vehicle {
 
     this.glassMaterial = null;
     this.cabinDisplay = null;
+    this.mirrors = null;
 
     // ---- state fisika ----
     this.pos = new THREE.Vector3(0, 0, 0);
@@ -370,6 +372,10 @@ export class Vehicle {
     this.cabinDisplay = new CabinDisplay();
     this.body.add(this.cabinDisplay.root);
 
+    // ---- kaca spion fungsional ----
+    this.mirrors = new VehicleMirrors(this);
+    this.body.add(this.mirrors.root);
+
     // ---- pivot roda (saudara bodi, supaya tidak ikut roll kosmetik) ----
     for (let k = 0; k < 4; k++) {
       const c = WHEEL_CENTERS[k];
@@ -431,6 +437,7 @@ export class Vehicle {
     this.steerWheelAngle = 0;
     if (this.steerWheel) this.steerWheel.quaternion.copy(this.steerWheelBase);
     if (this.cabinDisplay) this.cabinDisplay.reset();
+    if (this.mirrors) this.mirrors.reset();
 
     this.rpm = 820;
     this.throttle = 0;

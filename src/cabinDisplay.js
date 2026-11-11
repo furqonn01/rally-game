@@ -23,10 +23,10 @@ const HEAD_H = 576;
 const SPEEDO_POS = new THREE.Vector3(-0.426, 0.793, -0.370);
 const SPEEDO_SIZE = { w: 0.312, h: 0.114 };
 
-// Konsol tengah 'cd': tepat di antara kedua lubang AC tengah, menempel sempurna di konsol
-const HEAD_POS = new THREE.Vector3(0.000, 0.705, -0.335);
-const HEAD_SIZE = { w: 0.272, h: 0.140 };
-const HEAD_ROT = new THREE.Euler(-0.11, 0.06, 0, 'YXZ'); // sedikit miring ke atas & sudut sangat halus menghadap pengemudi
+// Konsol tengah 'cd': tepat di area recessed konsol tengah di bawah lubang AC
+const HEAD_POS = new THREE.Vector3(0.000, 0.638, -0.344);
+const HEAD_SIZE = { w: 0.248, h: 0.116 };
+const HEAD_ROT = new THREE.Euler(0.105, 0.035, 0, 'YXZ'); // mengikuti kontur kemiringan konsol tengah
 
 export class CabinDisplay {
   constructor() {
@@ -64,6 +64,9 @@ export class CabinDisplay {
       roughness: 0.25,
       metalness: 0.05,
       toneMapped: true,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
     });
 
     const headMat = new THREE.MeshStandardMaterial({
@@ -74,6 +77,9 @@ export class CabinDisplay {
       roughness: 0.25,
       metalness: 0.05,
       toneMapped: true,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
     });
 
     // Material bezel / bingkai hitam matte
@@ -109,12 +115,12 @@ export class CabinDisplay {
     headGroup.position.copy(HEAD_POS);
     headGroup.rotation.copy(HEAD_ROT);
 
-    // Bezel tipis belakang
+    // Bezel kokoh 3D dengan ketebalan fisik (tidak tembus / tipis berlubang)
     const headBezel = new THREE.Mesh(
-      new THREE.PlaneGeometry(HEAD_SIZE.w + 0.008, HEAD_SIZE.h + 0.008),
+      new THREE.BoxGeometry(HEAD_SIZE.w + 0.008, HEAD_SIZE.h + 0.008, 0.006),
       bezelMat
     );
-    headBezel.position.set(0, 0, -0.001);
+    headBezel.position.set(0, 0, -0.003);
     headGroup.add(headBezel);
 
     // Layar
@@ -122,6 +128,7 @@ export class CabinDisplay {
       new THREE.PlaneGeometry(HEAD_SIZE.w, HEAD_SIZE.h),
       headMat
     );
+    headMesh.position.set(0, 0, 0.0005);
     headMesh.name = 'headUnitScreen';
     headGroup.add(headMesh);
     this.root.add(headGroup);

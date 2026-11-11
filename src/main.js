@@ -763,6 +763,10 @@ function animate() {
     state.fpsTimer = 0;
   }
 
+  if (vehicle.loaded && vehicle.mirrors) {
+    vehicle.mirrors.update(renderer, scene, camRig);
+  }
+
   renderer.render(scene, camera);
 }
 
