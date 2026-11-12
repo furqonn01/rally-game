@@ -78,8 +78,6 @@ const probe = `(() => {
   };
   const start = document.getElementById('start');
   out.start = box(start);
-  out.hint = box(document.getElementById('installHint'));
-  out.btn = box(document.getElementById('installBtn'));
   if (start) {
     const cs = getComputedStyle(start);
     out.overlayScroll = {

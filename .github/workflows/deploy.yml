@@ -1,9 +1,6 @@
 name: Deploy ke GitHub Pages
 
-# Game ini hanya bisa dipasang untuk mode offline lewat HTTPS (atau localhost),
-# karena service worker — yang menyimpan seluruh game ke perangkat — dilarang
-# browser di origin tidak aman seperti http://192.168.x.x.
-# Workflow ini menerbitkan build PWA ke GitHub Pages supaya bisa dipasang di HP.
+# Workflow ini menerbitkan build web game ke GitHub Pages.
 
 on:
   push:
@@ -34,7 +31,7 @@ jobs:
       - name: Pasang dependensi
         run: npm ci
 
-      - name: Build PWA
+      - name: Build web game
         run: npm run build
 
       - uses: actions/configure-pages@v5

@@ -22,42 +22,21 @@ Game offroad 3D berbasis browser yang dibangun dengan **Three.js** dan **Vite**.
 - **Getaran roda & kamera** — tiap roda berguncang dan bergoyang mengikuti kekasaran medan, dan kamera ikut bergetar (paling keras di POV pengemudi).
 - **Kontrol keyboard + mouse** — setir, kamera, dan orbit bebas tanpa perlu pointer lock.
 - **Kontrol sentuh untuk HP** — tombol gas/rem/setir/rem tangan di layar, drag satu jari untuk memutar kamera, cubit dua jari untuk zoom, plus getaran haptic saat menekan tombol.
-- **Bisa dipasang & dimainkan offline (PWA)** — pasang ke layar utama HP/desktop lewat tombol **PASANG GAME INI** di menu, lalu mainkan tanpa koneksi internet.
 - **Build satu file** — `npm run build:offline` menghasilkan satu `index.html` mandiri (model 3D ikut tertanam) yang bisa dibuka langsung dari `file://`.
 
 ---
 
-## 📱 Memasang & Bermain Offline
+## 🚀 Menjalankan Game
 
-Game ini adalah **Progressive Web App (PWA)**: seluruh isi game — termasuk model mobil 3D — disimpan di cache perangkat, sehingga setelah dibuka sekali, game bisa dimainkan tanpa internet.
-
-> Service worker hanya aktif pada `https://` atau `localhost`. Kalau butuh main langsung dari `file://` tanpa server sama sekali, gunakan **build satu file** (lihat bagian di bawah).
-
-### ⚠️ Kenapa harus HTTPS (atau localhost)?
-
-Ini penyebab paling umum dari keluhan *"di browser jalan, tapi setelah dipasang aplikasinya tidak bisa dibuka"*.
-
-Browser hanya mengizinkan **service worker** dan **Cache Storage** pada **secure context**, yaitu `https://` atau `localhost`. Alamat IP lokal seperti `http://192.168.1.10:4173` **bukan** secure context, sehingga:
-
-- service worker gagal didaftarkan → tidak ada satu pun file yang di-cache;
-- ikon di layar utama tetap terbentuk, tetapi isinya kosong — dibuka hasilnya layar putih / tidak jalan;
-- halaman masih tampil normal kalau dibuka sebagai tab biasa (karena file diambil langsung dari server), jadi masalahnya sulit terlihat.
-
-Karena itu game mendeteksi kondisi ini dan **menyembunyikan tombol PASANG**, lalu menampilkan peringatan kuning berisi alamat IP yang dipakai. Supaya benar-benar bisa dipasang & offline di HP, sajikan lewat HTTPS:
-
-- **paling mudah:** deploy ke GitHub Pages / Netlify / Vercel / Cloudflare Pages (semua otomatis HTTPS), atau
-- `ngrok http 4173` / `cloudflared tunnel --url http://localhost:4173` untuk tunnel HTTPS ke server lokal, atau
-- **build satu file** (`npm run build:offline`) yang tidak butuh service worker sama sekali.
-
-> Bermain dari alamat IP lokal tetap bisa selama server-nya hidup — hanya **instalasi offline**-nya yang tidak akan bekerja.
+Game ini bisa dimainkan langsung di browser modern (Chrome, Edge, Safari, Firefox).
 
 ### Deploy ke GitHub Pages
 
-Workflow `.github/workflows/deploy.yml` sudah disiapkan: setiap `push` ke `main` akan build lalu publikasikan `dist/` ke GitHub Pages (HTTPS otomatis).
+Workflow `.github/workflows/deploy.yml` sudah disiapkan: setiap `push` ke `main` akan build lalu publikasikan `dist/` ke GitHub Pages secara otomatis.
 
 1. Repo → **Settings** → **Pages** → **Build and deployment** → *Source*: **GitHub Actions**.
-2. Push ke `main` (atau jalankan workflow **Deploy to GitHub Pages** secara manual dari tab *Actions*).
-3. Buka `https://<username>.github.io/<repo>/` — di sinilah tombol **PASANG GAME INI** berfungsi dan game bisa dimainkan offline setelah sekali dibuka.
+2. Push ke `main` (atau jalankan workflow **Deploy ke GitHub Pages** secara manual dari tab *Actions*).
+3. Buka `https://<username>.github.io/<repo>/` di browser.
 
 ### Android / Chrome / Edge
 
@@ -176,11 +155,9 @@ Buka `http://localhost:5173` di browser.
 ### Build untuk produksi
 
 ```bash
-npm run build           # build PWA (service worker + manifest) → dist/
+npm run build           # build web game → dist/
 npm run preview         # uji hasil build di http://localhost:4173
 ```
-
-Untuk menguji mode offline: buka `http://localhost:4173` sekali, lalu di DevTools → **Application → Service Workers** centang *Offline* (atau matikan Wi-Fi) dan muat ulang halaman. Game harus tetap jalan lengkap dengan model mobil.
 
 ```bash
 npm run build:offline   # satu file HTML mandiri → dist-offline/index.html
@@ -195,20 +172,19 @@ npm run build:offline   # satu file HTML mandiri → dist-offline/index.html
 ```
 FnOffroad/
 ├── index.html          # Markup HUD, overlay (loading / start / pause / finish), dan styling
-├── vite.config.js      # Konfigurasi Vite + PWA + build satu file + penyalinan model
+├── vite.config.js      # Konfigurasi Vite + build satu file + penyalinan model
 ├── package.json        # Metadata & dependency proyek
 ├── models/
 │   └── BAIC+BJ40.glb   # Model 3D kendaraan
 ├── public/
-│   ├── manifest.webmanifest  # Manifest PWA (nama, ikon, warna, orientasi)
-│   └── icons/                # Ikon aplikasi 192/512/maskable + apple-touch-icon
+│   └── icons/          # Ikon aplikasi
 ├── tools/
-│   └── make-icons.py   # Generator ikon PWA (Python + Pillow)
+│   └── make-icons.py   # Generator ikon (Python + Pillow)
 └── src/
     ├── main.js         # Entry point: renderer, scene, game loop, HUD, input, alur permainan
     ├── touch.js        # Bridge kontrol sentuh (multi-touch) ke pipeline input keyboard
-    ├── pwa.js          # Registrasi service worker + notifikasi versi baru
-    ├── install.js      # Tombol "PASANG GAME INI" (beforeinstallprompt) + petunjuk iOS
+    ├── cabinDisplay.js # Speedometer digital & Head Unit di dalam kabin
+    ├── mirrors.js      # Kaca spion fungsional kiri, tengah, kanan
     ├── terrain.js      # Generator terrain prosedural + helper height/normal/slope
     ├── vehicle.js      # Loader model, fisika kendaraan, roda, suspensi, telemetri
     ├── cameras.js      # CameraRig: mode chase, POV pengemudi, dan orbit bebas
@@ -216,25 +192,6 @@ FnOffroad/
     ├── track.js        # Kurva jalur, penempatan checkpoint, logika progres & respawn
     └── scenery.js      # Pohon, batu, rumput, dan sistem partikel debu
 ```
-
-### Membuat ulang ikon
-
-Ikon PWA dibuat secara prosedural, bukan file desain:
-
-```bash
-python -m pip install pillow
-python tools/make-icons.py
-```
-
----
-
-## 🔌 Catatan Offline
-
-- `vite-plugin-pwa` menghasilkan `dist/sw.js` yang mem-*precache* HTML, JS, ikon, dan **model GLB** (batas ukuran cache dinaikkan ke 8 MB karena model ± 1,9 MB).
-- `virtual:vehicle-url` adalah modul virtual di `vite.config.js`. Pada build biasa ia mengembalikan URL relatif (`./models/BAIC+BJ40.glb`), sedangkan pada `build:offline` ia mengembalikan **data URL base64** sehingga model ikut tertanam di HTML.
-- `base: './'` membuat semua path relatif, jadi build bisa ditaruh di sub-folder (GitHub Pages, itch.io, dsb.) tanpa konfigurasi tambahan.
-- `src/pwa.js` dan `src/install.js` memeriksa `isSecureContext` lebih dulu. Di origin tidak aman (mis. `http://192.168.x.x`) pendaftaran service worker dilewati dengan `console.warn` yang jelas, dan tombol **PASANG GAME INI** disembunyikan agar tidak menawarkan instalasi yang pasti gagal.
-- `vite-plugin-pwa` hanya mem-*precache* 8 entri; ikon tidak didaftarkan dua kali (`includeAssets` sengaja tidak dipakai karena `globPatterns` sudah mencakup `png`).
 
 ---
 

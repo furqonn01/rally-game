@@ -3,7 +3,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { defineConfig } from 'vite';
-import { VitePWA } from 'vite-plugin-pwa';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -95,37 +94,9 @@ export default defineConfig(({ mode }) => {
       cssCodeSplit: !singleFile,
     },
 
-    define: {
-      // Dipakai src/pwa.js untuk melewati registrasi SW pada build satu file.
-      __BJ40_SINGLE_FILE__: JSON.stringify(singleFile),
-    },
-
     plugins: [
       vehicleUrlPlugin({ inline: singleFile }),
       copyVehicleModel({ outDir, skip: singleFile }),
-
-      // Service worker + precache hanya untuk build PWA (butuh HTTPS/localhost).
-      !singleFile &&
-        VitePWA({
-          registerType: 'autoUpdate',
-          injectRegister: null, // registrasi manual di src/pwa.js
-          manifest: false, // memakai public/manifest.webmanifest
-          // Ikon sudah tercakup globPatterns di bawah; mendaftarkannya lagi lewat
-          // includeAssets hanya menghasilkan entri precache duplikat.
-          workbox: {
-            globPatterns: ['**/*.{js,css,html,glb,png,svg,webmanifest}'],
-            // Model mobil ~1.9 MB; batas default Workbox 2 MiB terlalu mepet.
-            maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
-            cleanupOutdatedCaches: true,
-            clientsClaim: true,
-            skipWaiting: true,
-            navigateFallback: 'index.html',
-            navigateFallbackDenylist: [/\/sw\.js$/, /\/manifest\.webmanifest$/],
-          },
-          devOptions: {
-            enabled: false, // uji offline pakai `npm run build && npm run preview`
-          },
-        }),
 
       singleFile &&
         viteSingleFile({

@@ -9,14 +9,25 @@ import { Scenery, Dust } from './scenery.js';
 import { VehicleAudio } from './audio.js';
 import { initTouch } from './touch.js';
 import VEHICLE_URL from 'virtual:vehicle-url';
-import { registerServiceWorker } from './pwa.js';
-import { setupInstall } from './install.js';
+
+// Unregister service worker lama & hapus cache PWA jika ada
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((regs) => {
+    for (const r of regs) r.unregister();
+  }).catch(() => {});
+  if (window.caches) {
+    caches.keys().then((keys) => {
+      for (const k of keys) caches.delete(k);
+    }).catch(() => {});
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Renderer
 // ---------------------------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isTouchDevice ? 1.5 : 1.75));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -140,8 +151,6 @@ const el = {
   pause: document.getElementById('pause'),
   finish: document.getElementById('finish'),
   finishSub: document.getElementById('finishSub'),
-  installBtn: document.getElementById('installBtn'),
-  installHint: document.getElementById('installHint'),
 };
 
 const BEST_KEY = 'bj40-offroad-best-v1';
@@ -492,8 +501,6 @@ function backToMenu() {
   for (const k in keys) keys[k] = false;
   readInput();
   if (touch) touch.clear();
-  install.refresh();
-  applyPendingUpdate();
 }
 
 function pauseGame() {
@@ -589,28 +596,6 @@ window.addEventListener('blur', () => {
 });
 
 // ---------------------------------------------------------------------------
-// PWA — bisa dipasang & dimainkan offline
-// ---------------------------------------------------------------------------
-let pendingUpdate = null;
-
-function applyPendingUpdate() {
-  if (!pendingUpdate) return;
-  const run = pendingUpdate;
-  pendingUpdate = null;
-  run();
-}
-
-registerServiceWorker((applyUpdate) => {
-  toast('VERSI BARU TERSEDIA — SIMPAN & MUAT ULANG', true);
-  // Jangan muat ulang di tengah balapan: tunda sampai pemain keluar ke menu.
-  if (state.mode === 'playing') pendingUpdate = applyUpdate;
-  else applyUpdate();
-});
-
-// Tombol "PASANG GAME INI" di menu utama (Chrome/Edge/Android).
-const install = setupInstall({ button: el.installBtn, hint: el.installHint });
-
-// ---------------------------------------------------------------------------
 // Ukuran layar
 // ---------------------------------------------------------------------------
 function onResize() {
@@ -657,7 +642,6 @@ async function boot() {
   el.start.classList.remove('hidden');
   state.mode = 'menu';
   applyModeUI();
-  install.refresh();
   clock.getDelta();
   animate();
 }
