@@ -38,3 +38,17 @@ Thumbs.db
 # Cache
 .cache/
 .vite/
+
+# Test artifacts, screenshots & verification scripts
+*.png
+!public/icons/*.png
+test-*.png
+final-*.png
+test-*.mjs
+test-*.js
+verify-*.mjs
+verify-*.js
+tools/test-*
+tools/verify-*
+screenshots/
+
