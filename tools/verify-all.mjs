@@ -121,14 +121,28 @@ const connect = (u) => new Promise((res, rej) => {
   await sleep(1500);
 
   // Start free roam & driver camera mode
-  await s('Runtime.evaluate', {
-    expression: `
-      window.__game.start('freeroam');
+  const consoleInfo = await s('Runtime.evaluate', {
+    expression: `(() => {
+      document.getElementById('freeRoamBtn').click();
       if (window.__game.camRig.mode !== 'pengemudi') {
         window.__game.camRig.cycle();
       }
-    `,
+      const vehicle = window.__game.vehicle;
+      const res = [];
+      vehicle.group.traverse((c) => {
+        if (c.isMesh && c.geometry) {
+          c.geometry.computeBoundingBox();
+          const bb = c.geometry.boundingBox;
+          if (Math.abs(bb.min.x) < 0.3 && Math.abs(bb.max.x) < 0.3 && bb.max.y > 0.5 && bb.min.y < 0.8) {
+            res.push({ name: c.name, min: bb.min, max: bb.max });
+          }
+        }
+      });
+      return JSON.stringify(res);
+    })()`,
+    returnByValue: true,
   });
+  console.log('Center console meshes:', consoleInfo.result?.value);
   await sleep(1500);
 
   // Test 1: Straight ahead cabin view (driver POV)

@@ -24,7 +24,7 @@ const SPEEDO_POS = new THREE.Vector3(-0.426, 0.793, -0.370);
 const SPEEDO_SIZE = { w: 0.312, h: 0.114 };
 
 // Konsol tengah: nempel langsung di ceruk permukaan konsol tengah bawaan model BAIC BJ40
-const HEAD_POS = new THREE.Vector3(0.000, 0.638, -0.344);
+const HEAD_POS = new THREE.Vector3(0.000, 0.665, -0.340);
 const HEAD_SIZE = { w: 0.248, h: 0.116 };
 const HEAD_ROT = new THREE.Euler(0.105, 0.035, 0, 'YXZ'); // mengikuti kemiringan ceruk konsol
 
