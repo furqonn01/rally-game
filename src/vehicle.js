@@ -372,9 +372,14 @@ export class Vehicle {
     this.cabinDisplay = new CabinDisplay();
     this.body.add(this.cabinDisplay.root);
 
-    // ---- kaca spion fungsional ----
+    // ---- kaca spion fungsional pada kaca model asli ('black_1_0_0_0') ----
     this.mirrors = new VehicleMirrors(this);
     this.body.add(this.mirrors.root);
+
+    const mirrorSourceMesh = scene.getObjectByName('black_1_0_0_0');
+    if (mirrorSourceMesh) {
+      this.mirrors.attachToModel(mirrorSourceMesh);
+    }
 
     // ---- pivot roda (saudara bodi, supaya tidak ikut roll kosmetik) ----
     for (let k = 0; k < 4; k++) {
@@ -479,7 +484,7 @@ export class Vehicle {
   }
 
   // -------------------------------------------------------------------------
-  update(dt, input) {
+  update(dt, input, isDriverMode = true) {
     if (!this.loaded) return;
 
     dt = Math.min(dt, 1 / 25);
@@ -806,7 +811,7 @@ export class Vehicle {
     this.telemetry.rough = this.roughness;
 
     if (this.cabinDisplay) {
-      this.cabinDisplay.update(this, dt);
+      this.cabinDisplay.update(this, dt, isDriverMode);
     }
 
     this.impact *= Math.exp(-3.5 * dt);

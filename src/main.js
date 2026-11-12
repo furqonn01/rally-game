@@ -681,10 +681,12 @@ function animate() {
   const dt = Math.min(dtRaw, 0.05);
   const now = performance.now() * 0.001;
 
+  const isDriverMode = camRig.mode === 'pengemudi';
+
   // ---- update dunia ----
   if (state.mode === 'playing') {
     readInput();
-    vehicle.update(dt, input);
+    vehicle.update(dt, input, isDriverMode);
     state.elapsed += dt;
     state.distance += Math.abs(vehicle.speed) * dt;
 
@@ -716,7 +718,7 @@ function animate() {
 
     if (vehicle.impact > 0.05) camRig.addShake(vehicle.impact * 0.55);
   } else if (state.mode === 'paused' || state.mode === 'finished' || state.mode === 'menu') {
-    vehicle.update(dt, { forward: false, back: false, left: false, right: false, handbrake: true });
+    vehicle.update(dt, { forward: false, back: false, left: false, right: false, handbrake: true }, isDriverMode);
   }
 
   dust.update(dt);

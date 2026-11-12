@@ -18,15 +18,15 @@ const SPEEDO_H = 384;
 const HEAD_W = 1024;
 const HEAD_H = 576;
 
-// Posisi & dimensi di ruang bodi mobil (mesh-lokal)
+// Posisi & dimensi speedometer di ruang bodi mobil (mesh-lokal)
 // Analisis geometri: binnacle 'zk' X: -0.58 s/d -0.27, Y: 0.74 s/d 0.85, Z: -0.375
 const SPEEDO_POS = new THREE.Vector3(-0.426, 0.793, -0.370);
 const SPEEDO_SIZE = { w: 0.312, h: 0.114 };
 
-// Konsol tengah 'cd': tepat di area recessed konsol tengah di bawah lubang AC
+// Konsol tengah: nempel langsung di ceruk permukaan konsol tengah bawaan model BAIC BJ40
 const HEAD_POS = new THREE.Vector3(0.000, 0.638, -0.344);
 const HEAD_SIZE = { w: 0.248, h: 0.116 };
-const HEAD_ROT = new THREE.Euler(0.105, 0.035, 0, 'YXZ'); // mengikuti kontur kemiringan konsol tengah
+const HEAD_ROT = new THREE.Euler(0.105, 0.035, 0, 'YXZ'); // mengikuti kemiringan ceruk konsol
 
 export class CabinDisplay {
   constructor() {
@@ -69,12 +69,14 @@ export class CabinDisplay {
       polygonOffsetUnits: -1,
     });
 
-    const headMat = new THREE.MeshStandardMaterial({
+    this.speedoMat = speedoMat;
+
+    this.headMat = new THREE.MeshStandardMaterial({
       map: this.headTexture,
       emissive: 0xffffff,
       emissiveMap: this.headTexture,
-      emissiveIntensity: 1.22,
-      roughness: 0.25,
+      emissiveIntensity: 1.25,
+      roughness: 0.22,
       metalness: 0.05,
       toneMapped: true,
       polygonOffset: true,
@@ -89,7 +91,7 @@ export class CabinDisplay {
       metalness: 0.50,
     });
 
-    // ---- 1. Speedometer Mesh ----
+    // ---- 1. Speedometer Mesh (di binnacle instrumen 'zk') ----
     const speedoGroup = new THREE.Group();
     speedoGroup.position.copy(SPEEDO_POS);
 
@@ -111,30 +113,21 @@ export class CabinDisplay {
     this.root.add(speedoGroup);
 
     // ---- 2. Head Unit Mesh ----
-    const headGroup = new THREE.Group();
-    headGroup.position.copy(HEAD_POS);
-    headGroup.rotation.copy(HEAD_ROT);
-
-    // Bezel kokoh 3D dengan ketebalan fisik (tidak tembus / tipis berlubang)
-    const headBezel = new THREE.Mesh(
-      new THREE.BoxGeometry(HEAD_SIZE.w + 0.008, HEAD_SIZE.h + 0.008, 0.006),
-      bezelMat
-    );
-    headBezel.position.set(0, 0, -0.003);
-    headGroup.add(headBezel);
-
-    // Layar
+    // Nempel langsung pada bidang permukaan konsol tengah model mobil,
+    // TANPA membuat kotakan tebal sendiri ("bukan bikin kotakan sendiri")
     const headMesh = new THREE.Mesh(
       new THREE.PlaneGeometry(HEAD_SIZE.w, HEAD_SIZE.h),
-      headMat
+      this.headMat
     );
-    headMesh.position.set(0, 0, 0.0005);
+    headMesh.position.copy(HEAD_POS);
+    headMesh.rotation.copy(HEAD_ROT);
     headMesh.name = 'headUnitScreen';
-    headGroup.add(headMesh);
-    this.root.add(headGroup);
+    this.root.add(headMesh);
+    this.headUnitMesh = headMesh;
 
-    // State internal animasi
-    this.updateTimer = 0;
+    // State internal animasi & timer throttled
+    this.speedoTimer = 0;
+    this.headTimer = 0;
     this.blinkTimer = 0;
     this.eqPhase = 0;
     this.smoothKmh = 0;
@@ -147,6 +140,34 @@ export class CabinDisplay {
     this.headTexture.needsUpdate = true;
   }
 
+  /**
+   * Menempelkan Head Unit display langsung pada mesh 'cd' (konsol tengah) model 3D.
+   * Tidak membuat kotak/bezel custom terpisah ("bukan bikin kotakan sendiri").
+   */
+  attachToHeadUnit(cdMesh) {
+    if (!cdMesh || !cdMesh.isMesh) return;
+    this.headUnitMesh = cdMesh;
+
+    cdMesh.geometry.computeBoundingBox();
+    const bb = cdMesh.geometry.boundingBox;
+    const pos = cdMesh.geometry.attributes.position;
+    const spanX = Math.max(0.001, bb.max.x - bb.min.x);
+    const spanY = Math.max(0.001, bb.max.y - bb.min.y);
+    const uvs = new Float32Array(pos.count * 2);
+
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      uvs[i * 2] = (x - bb.min.x) / spanX;
+      uvs[i * 2 + 1] = (y - bb.min.y) / spanY;
+    }
+
+    cdMesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    cdMesh.material = this.headMat;
+    cdMesh.castShadow = false;
+    cdMesh.receiveShadow = false;
+  }
+
   reset() {
     this.smoothKmh = 0;
     this.smoothRpm = 820;
@@ -156,15 +177,21 @@ export class CabinDisplay {
     this.headTexture.needsUpdate = true;
   }
 
-  update(vehicle, dt) {
+  update(vehicle, dt, isDriverMode = true) {
     this.blinkTimer += dt;
     this.eqPhase += dt * 8.5;
-    this.updateTimer += dt;
+    this.speedoTimer = (this.speedoTimer || 0) + dt;
+    this.headTimer = (this.headTimer || 0) + dt;
 
-    // Refresh rate ~35-40 fps untuk performa mulus tanpa beban CPU
-    if (this.updateTimer < 0.026) return;
-    const interval = this.updateTimer;
-    this.updateTimer = 0;
+    // Refresh rate teroptimasi: speedometer ~30 fps, head unit ~20 fps saat di kabin.
+    // Di luar kabin, turunkan ke ~7 fps untuk menghemat CPU dan upload tekstur GPU.
+    const speedoInterval = isDriverMode ? 0.033 : 0.140;
+    const headInterval = isDriverMode ? 0.050 : 0.180;
+
+    const doSpeedo = this.speedoTimer >= speedoInterval;
+    const doHead = this.headTimer >= headInterval;
+
+    if (!doSpeedo && !doHead) return;
 
     const telem = vehicle.telemetry || {};
     const kmhTarget = telem.kmh || 0;
@@ -179,39 +206,45 @@ export class CabinDisplay {
     const yaw = vehicle.yaw || 0;
 
     // Penghalusan jarum & angka
-    this.smoothKmh += (kmhTarget - this.smoothKmh) * Math.min(1, interval * 20);
-    this.smoothRpm += (rpmTarget - this.smoothRpm) * Math.min(1, interval * 18);
+    const interpDt = Math.min(0.05, Math.max(dt, this.speedoTimer));
+    this.smoothKmh += (kmhTarget - this.smoothKmh) * Math.min(1, interpDt * 20);
+    this.smoothRpm += (rpmTarget - this.smoothRpm) * Math.min(1, interpDt * 18);
 
-    const blinkOn = Math.floor(this.blinkTimer * 3.5) % 2 === 0;
-    const blinkLeft = steer > 0.08 && blinkOn;
-    const blinkRight = steer < -0.08 && blinkOn;
-    const handbrake = Math.abs(vehicle.speed || 0) < 0.4 && gear === 'N';
+    if (doSpeedo) {
+      this.speedoTimer = 0;
+      const blinkOn = Math.floor(this.blinkTimer * 3.5) % 2 === 0;
+      const blinkLeft = steer > 0.08 && blinkOn;
+      const blinkRight = steer < -0.08 && blinkOn;
+      const handbrake = Math.abs(vehicle.speed || 0) < 0.4 && gear === 'N';
 
-    this.renderSpeedo(
-      this.smoothKmh,
-      this.smoothRpm,
-      gear,
-      steer,
-      slip,
-      blinkLeft,
-      blinkRight,
-      handbrake,
-      roughness
-    );
+      this.renderSpeedo(
+        this.smoothKmh,
+        this.smoothRpm,
+        gear,
+        steer,
+        slip,
+        blinkLeft,
+        blinkRight,
+        handbrake,
+        roughness
+      );
+      this.speedoTexture.needsUpdate = true;
+    }
 
-    this.renderHeadUnit(
-      pitch,
-      roll,
-      yaw,
-      altitude,
-      gear,
-      roughness,
-      slip,
-      this.smoothRpm
-    );
-
-    this.speedoTexture.needsUpdate = true;
-    this.headTexture.needsUpdate = true;
+    if (doHead) {
+      this.headTimer = 0;
+      this.renderHeadUnit(
+        pitch,
+        roll,
+        yaw,
+        altitude,
+        gear,
+        roughness,
+        slip,
+        this.smoothRpm
+      );
+      this.headTexture.needsUpdate = true;
+    }
   }
 
   // =========================================================================

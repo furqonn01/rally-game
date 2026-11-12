@@ -120,15 +120,10 @@ const connect = (u) => new Promise((res, rej) => {
   }
   await sleep(1500);
 
-  // Click free roam button
-  await s('Runtime.evaluate', {
-    expression: `document.getElementById('freeRoamBtn').click();`,
-  });
-  await sleep(1000);
-
-  // Switch camera to driver mode
+  // Start free roam & driver camera mode
   await s('Runtime.evaluate', {
     expression: `
+      window.__game.start('freeroam');
       if (window.__game.camRig.mode !== 'pengemudi') {
         window.__game.camRig.cycle();
       }
@@ -141,11 +136,11 @@ const connect = (u) => new Promise((res, rej) => {
   fs.writeFileSync('final-cabin-straight.png', Buffer.from(shot1.data, 'base64'));
   console.log('Saved final-cabin-straight.png');
 
-  // Test 2: Center console & headunit view (looking slightly right)
+  // Test 2: Center console & headunit view (looking down and right at center console)
   await s('Runtime.evaluate', {
     expression: `
-      window.__game.camRig.dragYaw = -0.55;
-      window.__game.camRig.dragPitch = -0.05;
+      window.__game.camRig.dragYaw = -0.45;
+      window.__game.camRig.dragPitch = 0.22;
     `,
   });
   await sleep(1000);
@@ -165,11 +160,11 @@ const connect = (u) => new Promise((res, rej) => {
   fs.writeFileSync('final-mirror-left.png', Buffer.from(shotLeft.data, 'base64'));
   console.log('Saved final-mirror-left.png');
 
-  // Test 4: Center interior mirror view (looking up)
+  // Test 4: Center interior mirror view (looking up and right)
   await s('Runtime.evaluate', {
     expression: `
-      window.__game.camRig.dragYaw = 0.0;
-      window.__game.camRig.dragPitch = 0.28;
+      window.__game.camRig.dragYaw = -0.45;
+      window.__game.camRig.dragPitch = -0.45;
     `,
   });
   await sleep(1000);
